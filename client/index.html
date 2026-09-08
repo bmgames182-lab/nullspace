@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NULLSPACE</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="menu" class="screen">
+    <div class="panel">
+      <div class="eyebrow">XNL // EXPERIMENTAL MULTIPLAYER BUILD</div>
+      <h1>NULLSPACE</h1>
+      <p class="sub">You are not alone down here.</p>
+      <label>CALLSIGN</label>
+      <input id="nameInput" maxlength="18" value="xenolmorph" />
+      <label>ROOM CODE</label>
+      <input id="roomInput" maxlength="8" placeholder="X7KD2" />
+      <div class="row">
+        <button id="createBtn">CREATE ROOM</button>
+        <button id="joinBtn">JOIN ROOM</button>
+      </div>
+      <p id="status">Ready.</p>
+      <details>
+        <summary>Connection settings</summary>
+        <label>WORKER URL</label>
+        <input id="workerInput" value="http://localhost:8787" />
+      </details>
+    </div>
+  </div>
+
+  <div id="hud" hidden>
+    <div id="crosshair">+</div>
+    <div id="topLeft">
+      <div id="roomLabel">ROOM -----</div>
+      <div id="playerCount">1 PLAYER</div>
+    </div>
+    <div id="bottomLeft">
+      <div class="meter"><span>HP</span><b id="hp">100</b></div>
+      <div class="hint">WASD MOVE · SHIFT RUN · CLICK SHOOT · R RELOAD · ESC MENU</div>
+    </div>
+    <div id="ammo">12 / 48</div>
+    <div id="feed"></div>
+  </div>
+
+  <canvas id="game"></canvas>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
