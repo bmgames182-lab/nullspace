@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NULLSPACE</title>
+  <meta name="theme-color" content="#070a09" />
+  <title>NULLSPACE // Site-Null</title>
   <link rel="stylesheet" href="./styles.css" />
   <script type="importmap">
     {
@@ -16,43 +17,99 @@
 </head>
 <body>
   <div id="menu" class="screen">
-    <div class="panel">
-      <div class="eyebrow">XNL // EXPERIMENTAL MULTIPLAYER BUILD</div>
-      <h1>NULLSPACE</h1>
-      <p class="sub">You are not alone down here.</p>
-      <label>CALLSIGN</label>
-      <input id="nameInput" maxlength="18" value="xenolmorph" />
-      <label>ROOM CODE</label>
-      <input id="roomInput" maxlength="8" placeholder="X7KD2" />
-      <div class="row">
-        <button id="createBtn">CREATE ROOM</button>
-        <button id="joinBtn">JOIN ROOM</button>
-      </div>
-      <p id="status">Ready.</p>
-      <details>
-        <summary>Connection settings</summary>
-        <label>WORKER URL</label>
-        <input id="workerInput" value="http://localhost:8787" />
-      </details>
+    <div class="scanlines"></div>
+    <div class="menuShell">
+      <section class="brandBlock">
+        <div class="agency">AEGIS CONTAINMENT DIRECTORATE // SITE-NULL</div>
+        <h1>NULL<span>SPACE</span></h1>
+        <p class="tagline">Containment failed. Identity is no longer reliable.</p>
+        <div class="warning">LEVEL-4 INCIDENT // LOCAL REALITY BREACH</div>
+      </section>
+
+      <section class="panel terminalPanel">
+        <div class="panelHeader"><span>EXPEDITION TERMINAL</span><span class="onlineDot">● NETWORK</span></div>
+        <label for="nameInput">OPERATIVE CALLSIGN</label>
+        <input id="nameInput" maxlength="18" value="xenolmorph" autocomplete="off" />
+
+        <label for="roomInput">INCIDENT CODE</label>
+        <input id="roomInput" maxlength="8" placeholder="N7K2A" autocomplete="off" />
+
+        <div class="row">
+          <button id="createBtn" class="primary">OPEN INCIDENT</button>
+          <button id="joinBtn">JOIN INCIDENT</button>
+        </div>
+
+        <p id="status" aria-live="polite">Terminal ready.</p>
+
+        <details>
+          <summary>Network configuration</summary>
+          <label for="workerInput">MULTIPLAYER WORKER</label>
+          <input id="workerInput" value="http://localhost:8787" />
+        </details>
+      </section>
+
+      <aside class="intel panel">
+        <div class="panelHeader"><span>FIELD DIRECTIVE</span><span>REV 02</span></div>
+        <p>Do not assume another operative is human.</p>
+        <p>Recover the <b>Threshold Keycard</b>, initiate extraction, and seal the breach.</p>
+        <p class="muted">Some assignments contain classified objectives. Your role is revealed only to you.</p>
+      </aside>
+    </div>
+  </div>
+
+  <div id="briefing" class="briefing" hidden>
+    <div class="briefCard">
+      <div class="agency">CLASSIFIED ASSIGNMENT</div>
+      <div id="briefRole" class="briefRole">RESEARCH PERSONNEL</div>
+      <p id="briefText"></p>
+      <div id="briefLoadout" class="briefLoadout"></div>
+      <button id="briefDismiss" class="primary">ACKNOWLEDGE</button>
+    </div>
+  </div>
+
+  <div id="endScreen" class="briefing" hidden>
+    <div class="briefCard endCard">
+      <div class="agency">INCIDENT RESOLUTION</div>
+      <div id="endTitle" class="briefRole">CONTAINMENT RESTORED</div>
+      <p id="endText"></p>
+      <button id="endDismiss" class="primary">RETURN TO TERMINAL</button>
     </div>
   </div>
 
   <div id="hud" hidden>
-    <div id="crosshair">+</div>
-    <div id="topLeft">
-      <div id="roomLabel">ROOM -----</div>
-      <div id="playerCount">1 PLAYER</div>
+    <div class="vignette"></div>
+    <div id="damageFlash"></div>
+    <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+
+    <div id="topLeft" class="hudBlock">
+      <div class="tinyLabel">INCIDENT</div>
+      <div id="roomLabel">-----</div>
+      <div class="hudSub"><span id="playerCount">1 OPERATIVE</span><span id="phaseLabel">WAITING</span></div>
     </div>
-    <div id="bottomLeft">
-      <div class="meter"><span>HP</span><b id="hp">100</b></div>
-      <div class="hint">WASD MOVE · SHIFT RUN · CLICK SHOOT · R RELOAD · ESC MENU</div>
+
+    <div id="rolePanel" class="hudBlock">
+      <div class="tinyLabel">ASSIGNMENT</div>
+      <div id="roleLabel">UNASSIGNED</div>
+      <div id="objectiveLabel">Awaiting additional personnel.</div>
     </div>
-    <div id="ammo">12 / 48</div>
+
+    <div id="timer" class="hudBlock">00:00</div>
+
+    <div id="bottomLeft" class="hudBlock statusBlock">
+      <div class="vitals">
+        <div><span>VITALS</span><b id="hp">100</b></div>
+        <div><span>STAMINA</span><b id="stamina">100</b></div>
+      </div>
+      <div class="hint">WASD MOVE · SHIFT SPRINT · C CROUCH · L LIGHT · E INTERACT · Q ABILITY · R RELOAD</div>
+    </div>
+
+    <div id="ammo" class="hudBlock"><span id="ammoCurrent">12</span><small>/</small><span id="ammoReserve">48</span><em>9×19</em></div>
     <div id="feed"></div>
+    <div id="interaction" hidden>[ E ] INTERACT</div>
+    <div id="centerNotice" hidden></div>
   </div>
 
   <canvas id="game"></canvas>
-
   <script type="module" src="./game.js"></script>
 </body>
 </html>
