@@ -17,7 +17,11 @@ export class NetClient {
   connect(baseUrl, room, name) {
     return new Promise((resolve, reject) => {
       let settled = false;
-      const url = new URL(baseUrl);
+      const rawBase = String(baseUrl || "").trim();
+      const normalizedBase = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(rawBase)
+        ? rawBase
+        : `https://${rawBase}`;
+      const url = new URL(normalizedBase);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.pathname = "/room/" + encodeURIComponent(room);
       url.searchParams.set("name", name);
