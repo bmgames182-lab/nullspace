@@ -19,7 +19,10 @@ jobs:
           node --check client/world.js
           node --check client/audio.js
           node --check client/ragdoll.js
-      - name: Verify entrypoint
+          node --check client/soldier_skin.js
+      - name: Verify reset entrypoint
         run: |
           grep -q 'GHOSTCAM' client/index.html
+          grep -q './soldier_skin.js' client/index.html
           grep -q './game.js' client/index.html
+          test ! -e worker/src/index.ts
