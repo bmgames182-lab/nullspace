@@ -15,9 +15,9 @@ window.addEventListener("keydown",e=>{
 },{capture:true});
 let last=performance.now();
 function loop(now){
-  const dt=Math.min(.05,(now-last)/1000||.016);last=now;const dead=!!netRef?.self?.dead;
-  if(!dead){overlay.style.display="none";currentId=null;requestAnimationFrame(loop);return}
-  const p=netRef.players.get(currentId)||choose(0);overlay.style.display="block";const cross=document.querySelector("#crosshair");if(cross)cross.style.opacity="0";
+  const dt=Math.min(.05,(now-last)/1000||.016);last=now;const dead=!!netRef?.self?.dead,cross=document.querySelector("#crosshair");
+  if(!dead){overlay.style.display="none";currentId=null;if(cross)cross.style.opacity="";requestAnimationFrame(loop);return}
+  const p=netRef.players.get(currentId)||choose(0);overlay.style.display="block";if(cross)cross.style.opacity="0";
   if(!p){overlay.textContent="NO ACTIVE SIGNALS // WAIT FOR INCIDENT RESOLUTION";requestAnimationFrame(loop);return}
   overlay.textContent=`SPECTATING // ${p.name}   ·   ← / → / SPACE SWITCH`;
   if(cameraRef){cameraRef.position.x=THREE.MathUtils.lerp(cameraRef.position.x,p.x||0,1-Math.exp(-dt*9));cameraRef.position.z=THREE.MathUtils.lerp(cameraRef.position.z,p.z||0,1-Math.exp(-dt*9));cameraRef.position.y=THREE.MathUtils.lerp(cameraRef.position.y,1.58,1-Math.exp(-dt*10));const pitch=THREE.MathUtils.clamp(Number(p.pitch)||0,-1.35,1.35),yaw=Number(p.yaw)||0;cameraRef.rotation.order="YXZ";cameraRef.rotation.x=THREE.MathUtils.lerp(cameraRef.rotation.x,pitch,1-Math.exp(-dt*7));let dy=((yaw-cameraRef.rotation.y+Math.PI)%(Math.PI*2))-Math.PI;cameraRef.rotation.y+=dy*(1-Math.exp(-dt*7))}
