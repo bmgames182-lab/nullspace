@@ -17,20 +17,22 @@ type RoundState={
   extractionStartedAt:number;extractionEndsAt:number;endedAt:number;
   keycardTaken:boolean;keycardHolder:string|null;anomalyEscaped:boolean;
   winner:"humans"|"anomaly"|null;reason:string;roundNumber:number;armoryCharges:number;medCharges:number;
+  supplyTaken:Record<string,boolean>;
 };
 
 type Vec2={x:number;z:number};
 const POS={
-  keycard:{x:-16,z:14},terminal:{x:14,z:13},gate:{x:17,z:-14},seal:{x:12.5,z:-14},armory:{x:-17,z:-4},med:{x:4,z:-17}
+  keycard:{x:-16,z:14},terminal:{x:14,z:13},gate:{x:17,z:-14},seal:{x:12.5,z:-14},armory:{x:-17,z:-4},med:{x:4,z:-17},
+  supplyA:{x:-6,z:14},supplyB:{x:6,z:-10},supplyC:{x:-2,z:2}
 } satisfies Record<string,Vec2>;
 const MAX_PLAYERS=12;
 
 export default{
   async fetch(request:Request,env:Env):Promise<Response>{
     const url=new URL(request.url);
-    if(url.pathname==="/health")return json({ok:true,service:"nullspace",version:4});
+    if(url.pathname==="/health")return json({ok:true,service:"nullspace",version:5});
     const match=url.pathname.match(/^\/room\/([A-Za-z0-9_-]{1,16})$/);
-    if(!match)return json({service:"NULLSPACE // Site-Null",status:"online",version:4,hint:"WebSocket /room/{code}"});
+    if(!match)return json({service:"NULLSPACE // Site-Null",status:"online",version:5,hint:"WebSocket /room/{code}"});
     if(request.headers.get("Upgrade")?.toLowerCase()!=="websocket")return new Response("Expected WebSocket",{status:426});
     const code=match[1].toUpperCase(),id=env.GAME_ROOM.idFromName(code);
     return env.GAME_ROOM.get(id).fetch(request)
@@ -44,7 +46,8 @@ export class GameRoom extends DurableObject<Env>{
   constructor(ctx:DurableObjectState,env:Env){
     super(ctx,env);
     ctx.blockConcurrencyWhile(async()=>{
-      const saved=await ctx.storage.get<RoundState>("round");if(saved)this.round=saved;
+      const saved=await ctx.storage.get<RoundState>("round");
+      if(saved)this.round={...blankRound(saved.seed||""),...saved,supplyTaken:{a:false,b:false,c:false,...(saved.supplyTaken||{})}};
       for(const ws of ctx.getWebSockets()){
         const p=ws.deserializeAttachment() as Player|null;
         if(p?.id)this.players.set(p.id,p)
@@ -184,7 +187,7 @@ export class GameRoom extends DurableObject<Env>{
     }
 
     this.round.phase="briefing";this.round.startsAt=Date.now()+4500;this.round.startedAt=0;this.round.winner=null;this.round.reason="";
-    this.round.keycardTaken=false;this.round.keycardHolder=null;this.round.anomalyEscaped=false;this.round.armoryCharges=3;this.round.medCharges=4;
+    this.round.keycardTaken=false;this.round.keycardHolder=null;this.round.anomalyEscaped=false;this.round.armoryCharges=3;this.round.medCharges=4;this.round.supplyTaken={a:false,b:false,c:false};
     await this.persistRound();await this.ctx.storage.setAlarm(this.round.startsAt);
     this.broadcast({type:"event",kind:"countdown",text:"Assignments issued. Deployment in 4 seconds."});this.broadcastSnapshot()
   }
@@ -206,6 +209,24 @@ export class GameRoom extends DurableObject<Env>{
 
   private async interact(ws:WebSocket,p:Player,kind:string){
     if(!this.gameplayLive()||p.dead||p.escaped)return;
+
+    if(kind==="supplyA"||kind==="supplyB"||kind==="supplyC"){
+      const id=kind.slice(-1).toLowerCase(),pos=POS[kind as keyof typeof POS];
+      if(!pos||distance(p,pos)>1.95)return;
+      if(this.round.supplyTaken[id]){this.send(ws,{type:"notice",text:"Supply cache is empty."});return}
+      if(kind==="supplyB"&&p.hp>=p.maxHp){this.send(ws,{type:"notice",text:"Medical supplies are not needed right now."});return}
+      this.round.supplyTaken[id]=true;
+      if(kind==="supplyA"){
+        if(!p.weapon){p.weapon=true;p.ammo=8;p.reserve=Math.max(p.reserve,12)}else p.reserve=Math.min(96,p.reserve+24)
+      }else if(kind==="supplyB"){
+        p.hp=Math.min(p.maxHp,p.hp+45)
+      }else{
+        p.reserve=Math.min(96,p.reserve+30)
+      }
+      this.savePlayer(ws,p);await this.persistRound();this.sendSelf(ws,p);
+      this.broadcast({type:"event",kind:"objective",text:`${p.name} searched a field supply cache.`});this.broadcastSnapshot();return
+    }
+
     if(kind==="armory"){
       if(this.round.phase!=="active"||distance(p,POS.armory)>2.1||p.role==="anomaly"||p.role==="observer")return;
       if(p.weapon){this.send(ws,{type:"notice",text:"You are already armed."});return}
@@ -314,7 +335,7 @@ export class GameRoom extends DurableObject<Env>{
   private publicPlayer(p:Player){return{id:p.id,name:p.name,ready:p.ready,joinedAt:p.joinedAt,x:p.x,z:p.z,yaw:p.yaw,pitch:p.pitch,hp:p.hp,maxHp:p.maxHp,dead:p.dead,escaped:p.escaped,revealed:p.revealedUntil>Date.now()}}
   private publicPlayers(){return[...this.players.values()].map(p=>this.publicPlayer(p))}
   private selfView(p:Player){return{...this.publicPlayer(p),role:p.role,ammo:p.ammo,reserve:p.reserve,weapon:p.weapon,hasKeycard:p.hasKeycard}}
-  private publicRound(){return{phase:this.round.phase,seed:this.round.seed,hostId:this.round.hostId,map:this.round.map,startsAt:this.round.startsAt,startedAt:this.round.startedAt,extractionStartedAt:this.round.extractionStartedAt,extractionEndsAt:this.round.extractionEndsAt,keycardTaken:this.round.keycardTaken,keycardHolder:this.round.keycardHolder,winner:this.round.winner,reason:this.round.reason,roundNumber:this.round.roundNumber,armoryCharges:this.round.armoryCharges,medCharges:this.round.medCharges}}
+  private publicRound(){return{phase:this.round.phase,seed:this.round.seed,hostId:this.round.hostId,map:this.round.map,startsAt:this.round.startsAt,startedAt:this.round.startedAt,extractionStartedAt:this.round.extractionStartedAt,extractionEndsAt:this.round.extractionEndsAt,keycardTaken:this.round.keycardTaken,keycardHolder:this.round.keycardHolder,winner:this.round.winner,reason:this.round.reason,roundNumber:this.round.roundNumber,armoryCharges:this.round.armoryCharges,medCharges:this.round.medCharges,supplyTaken:this.round.supplyTaken}}
   private broadcastSnapshot(){
     const players=this.publicPlayers(),round=this.publicRound();
     for(const ws of this.ctx.getWebSockets()){
@@ -325,7 +346,7 @@ export class GameRoom extends DurableObject<Env>{
 }
 
 function blankRound(seed:string):RoundState{
-  return{phase:"lobby",seed,hostId:null,map:"level0",createdAt:Date.now(),startsAt:0,startedAt:0,extractionStartedAt:0,extractionEndsAt:0,endedAt:0,keycardTaken:false,keycardHolder:null,anomalyEscaped:false,winner:null,reason:"",roundNumber:1,armoryCharges:3,medCharges:4}
+  return{phase:"lobby",seed,hostId:null,map:"level0",createdAt:Date.now(),startsAt:0,startedAt:0,extractionStartedAt:0,extractionEndsAt:0,endedAt:0,keycardTaken:false,keycardHolder:null,anomalyEscaped:false,winner:null,reason:"",roundNumber:1,armoryCharges:3,medCharges:4,supplyTaken:{a:false,b:false,c:false}}
 }
 function cleanName(v:string){return v.replace(/[^a-zA-Z0-9_\- ]/g,"").trim().slice(0,18)||"wanderer"}
 function finite(v:any,fallback:number,min:number,max:number){const n=Number(v);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback}
