@@ -50,7 +50,7 @@
       </section>
 
       <aside class="intel panel">
-        <div class="panelHeader"><span>FIELD DIRECTIVE</span><span>REV 04</span></div>
+        <div class="panelHeader"><span>FIELD DIRECTIVE</span><span>REV 05</span></div>
         <p><b>Trust nobody automatically.</b> A Mimic can wear a human face.</p>
         <p>Recover the Threshold Keycard, open extraction, and stop the anomaly crossing with you.</p>
         <p class="muted">Best experienced with proximity voice enabled.</p>
@@ -62,18 +62,11 @@
     <div class="lobbyCard panel">
       <div class="panelHeader"><span>INCIDENT LOBBY</span><span id="lobbyHostBadge">HOST: ---</span></div>
       <div class="lobbyTop">
-        <div>
-          <div class="tinyLabel">INCIDENT CODE</div>
-          <div id="lobbyCode" class="bigCode">-----</div>
-        </div>
+        <div><div class="tinyLabel">INCIDENT CODE</div><div id="lobbyCode" class="bigCode">-----</div></div>
         <button id="copyCodeBtn" class="small">COPY CODE</button>
       </div>
-
       <div class="lobbyGrid">
-        <div>
-          <div class="tinyLabel sectionLabel">OPERATIVES</div>
-          <div id="lobbyPlayers" class="playerList"></div>
-        </div>
+        <div><div class="tinyLabel sectionLabel">OPERATIVES</div><div id="lobbyPlayers" class="playerList"></div></div>
         <div class="lobbySide">
           <div class="tinyLabel sectionLabel">DEPLOYMENT</div>
           <div class="settingLine"><span>MAP</span><b>LEVEL 0 // SITE-NULL</b></div>
@@ -83,33 +76,19 @@
           <div id="voiceState" class="microText">Voice is off. Browser mic permission is required.</div>
         </div>
       </div>
-
-      <div class="lobbyActions">
-        <button id="readyBtn" class="primary">READY</button>
-        <button id="startBtn">START INCIDENT</button>
-        <button id="leaveLobbyBtn" class="dangerBtn">LEAVE</button>
-      </div>
+      <div class="lobbyActions"><button id="readyBtn" class="primary">READY</button><button id="startBtn">START INCIDENT</button><button id="leaveLobbyBtn" class="dangerBtn">LEAVE</button></div>
       <div id="lobbyStatus" class="lobbyStatus">Waiting for host.</div>
     </div>
   </div>
 
   <div id="briefing" class="briefing" hidden>
-    <div class="briefCard">
-      <div class="agency">CLASSIFIED ASSIGNMENT</div>
-      <div id="briefRole" class="briefRole">RESEARCH PERSONNEL</div>
-      <p id="briefText"></p>
-      <div id="briefLoadout" class="briefLoadout"></div>
-      <button id="briefDismiss" class="primary">ACKNOWLEDGE</button>
-    </div>
+    <div class="briefCard"><div class="agency">CLASSIFIED ASSIGNMENT</div><div id="briefRole" class="briefRole">RESEARCH PERSONNEL</div><p id="briefText"></p><div id="briefLoadout" class="briefLoadout"></div><button id="briefDismiss" class="primary">ACKNOWLEDGE</button></div>
   </div>
 
   <div id="pauseMenu" class="pauseOverlay" hidden>
     <div class="pauseCard panel">
-      <div class="agency">INCIDENT PAUSED LOCALLY</div>
-      <h2>NULLSPACE</h2>
-      <button id="resumeBtn" class="primary wide">RESUME</button>
-      <button id="pauseSettingsBtn" class="wide">SETTINGS</button>
-      <button id="leaveMatchBtn" class="wide dangerBtn">LEAVE INCIDENT</button>
+      <div class="agency">INCIDENT PAUSED LOCALLY</div><h2>NULLSPACE</h2>
+      <button id="resumeBtn" class="primary wide">RESUME</button><button id="pauseSettingsBtn" class="wide">SETTINGS</button><button id="leaveMatchBtn" class="wide dangerBtn">LEAVE INCIDENT</button>
       <div class="microText">ESC opens this menu. Other players are still moving.</div>
     </div>
   </div>
@@ -124,66 +103,29 @@
         <label>BRIGHTNESS <span id="brightnessValue"></span><input id="brightnessSetting" type="range" min="0.7" max="1.5" step="0.05"></label>
         <label>MASTER VOLUME <span id="volumeValue"></span><input id="volumeSetting" type="range" min="0" max="1" step="0.05"></label>
         <label>VOICE VOLUME <span id="voiceVolumeValue"></span><input id="voiceVolumeSetting" type="range" min="0" max="1" step="0.05"></label>
-        <label>FPS CAP
-          <select id="fpsSetting">
-            <option value="0">Unlimited</option><option value="60">60</option><option value="90">90</option><option value="120">120</option><option value="144">144</option>
-          </select>
-        </label>
+        <label>FPS CAP<select id="fpsSetting"><option value="0">Unlimited</option><option value="60">60</option><option value="90">90</option><option value="120">120</option><option value="144">144</option></select></label>
         <label class="checkLine"><input id="pttSetting" type="checkbox"> PUSH-TO-TALK (V)</label>
       </div>
-      <div class="controlsCard">
-        <b>CONTROLS</b>
-        <span>WASD Move</span><span>Shift Sprint</span><span>Ctrl Crouch</span><span>F Flashlight</span>
-        <span>E Interact</span><span>R Reload</span><span>Q Mimic Ability</span><span>ESC Game Menu</span><span>V Push-to-talk</span>
-      </div>
+      <div class="controlsCard"><b>CONTROLS</b><span>WASD Move</span><span>Shift Sprint</span><span>Ctrl Crouch</span><span>F Flashlight</span><span>E Interact</span><span>R Reload</span><span>Q Mimic Ability</span><span>ESC Game Menu</span><span>V Push-to-talk</span></div>
     </div>
   </div>
 
   <div id="endScreen" class="briefing" hidden>
-    <div class="briefCard endCard">
-      <div class="agency">INCIDENT RESOLUTION</div>
-      <div id="endTitle" class="briefRole">CONTAINMENT RESTORED</div>
-      <p id="endText"></p>
-      <button id="endLobbyBtn" class="primary">RETURN TO LOBBY</button>
-      <div id="endWait" class="microText"></div>
-    </div>
+    <div class="briefCard endCard"><div class="agency">INCIDENT RESOLUTION</div><div id="endTitle" class="briefRole">CONTAINMENT RESTORED</div><p id="endText"></p><button id="endLobbyBtn" class="primary">RETURN TO LOBBY</button><div id="endWait" class="microText"></div></div>
   </div>
 
   <div id="hud" hidden>
-    <div class="vignette"></div>
-    <div id="damageFlash"></div>
-    <div id="crosshair"><i></i><i></i><i></i><i></i></div>
-
-    <div id="topLeft" class="hudBlock">
-      <div class="tinyLabel">INCIDENT</div>
-      <div id="roomLabel">-----</div>
-      <div class="hudSub"><span id="playerCount">1 OPERATIVE</span><span id="phaseLabel">LOBBY</span></div>
-    </div>
-
-    <div id="rolePanel" class="hudBlock">
-      <div class="tinyLabel">ASSIGNMENT</div>
-      <div id="roleLabel">UNASSIGNED</div>
-      <div id="objectiveLabel">Awaiting deployment.</div>
-    </div>
-
+    <div class="vignette"></div><div id="damageFlash"></div><div id="crosshair"><i></i><i></i><i></i><i></i></div>
+    <div id="topLeft" class="hudBlock"><div class="tinyLabel">INCIDENT</div><div id="roomLabel">-----</div><div class="hudSub"><span id="playerCount">1 OPERATIVE</span><span id="phaseLabel">LOBBY</span></div></div>
+    <div id="rolePanel" class="hudBlock"><div class="tinyLabel">ASSIGNMENT</div><div id="roleLabel">UNASSIGNED</div><div id="objectiveLabel">Awaiting deployment.</div></div>
     <div id="timer" class="hudBlock">00:00</div>
-
-    <div id="bottomLeft" class="hudBlock statusBlock">
-      <div class="vitals">
-        <div><span>VITALS</span><b id="hp">100</b></div>
-        <div><span>STAMINA</span><b id="stamina">100</b></div>
-      </div>
-      <div class="hint">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · F LIGHT · E INTERACT · Q ABILITY · R RELOAD · ESC MENU</div>
-    </div>
-
+    <div id="bottomLeft" class="hudBlock statusBlock"><div class="vitals"><div><span>VITALS</span><b id="hp">100</b></div><div><span>STAMINA</span><b id="stamina">100</b></div></div><div class="hint">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · F LIGHT · E INTERACT · Q ABILITY · R RELOAD · ESC MENU</div></div>
     <div id="ammo" class="hudBlock"><span id="ammoCurrent">0</span><small>/</small><span id="ammoReserve">0</span><em>9×19</em></div>
-    <div id="feed"></div>
-    <div id="interaction" hidden>[ E ] INTERACT</div>
-    <div id="centerNotice" hidden></div>
-    <div id="voiceIndicator" hidden>VOICE</div>
+    <div id="feed"></div><div id="interaction" hidden>[ E ] INTERACT</div><div id="centerNotice" hidden></div><div id="voiceIndicator" hidden>VOICE</div>
   </div>
 
   <canvas id="game"></canvas>
+  <script type="module" src="./props.js"></script>
   <script type="module" src="./game.js"></script>
 </body>
 </html>
