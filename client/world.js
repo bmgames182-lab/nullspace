@@ -11,185 +11,240 @@ export const WORLD = Object.freeze({
   ANOMALY_SPAWN:new THREE.Vector3(14,0,14)
 });
 
+const HALF=20.45;
+const WALL_H=3.04;
+const CELL=4;
+const GRID=10;
+
 function seeded(seedText){
   let s=2166136261>>>0;
   for(let i=0;i<seedText.length;i++){s^=seedText.charCodeAt(i);s=Math.imul(s,16777619)}
   return()=>{s+=0x6D2B79F5;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}
 }
-
-function canvasTexture(draw,size=256){
+function canvasTexture(draw,size=512){
   const c=document.createElement("canvas");c.width=c.height=size;
-  const ctx=c.getContext("2d");draw(ctx,size);
-  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;
-  t.anisotropy=4;return t
+  const ctx=c.getContext("2d",{alpha:false});draw(ctx,size);
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t
 }
 function wallpaperTexture(rand){
   return canvasTexture((ctx,s)=>{
-    ctx.fillStyle="#b7aa63";ctx.fillRect(0,0,s,s);
-    for(let x=0;x<s;x+=30){ctx.fillStyle="rgba(85,74,32,.10)";ctx.fillRect(x,0,2,s)}
-    for(let i=0;i<260;i++){
-      const a=.025+rand()*.07;ctx.fillStyle=`rgba(55,49,24,${a})`;
-      const x=rand()*s,y=rand()*s;ctx.fillRect(x,y,1+rand()*10,1+rand()*4)
+    ctx.fillStyle="#b8ab66";ctx.fillRect(0,0,s,s);
+    const g=ctx.createLinearGradient(0,0,s,0);g.addColorStop(0,"rgba(70,59,25,.08)");g.addColorStop(.5,"rgba(255,244,173,.05)");g.addColorStop(1,"rgba(63,53,23,.08)");ctx.fillStyle=g;ctx.fillRect(0,0,s,s);
+    ctx.lineWidth=1;
+    for(let x=0;x<s;x+=64){ctx.strokeStyle="rgba(66,58,27,.16)";ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,s);ctx.stroke()}
+    for(let y=8;y<s;y+=72){
+      for(let x=12;x<s;x+=48){
+        ctx.strokeStyle="rgba(85,72,31,.16)";ctx.beginPath();ctx.moveTo(x,y+20);ctx.quadraticCurveTo(x+12,y+4,x+24,y+20);ctx.quadraticCurveTo(x+12,y+35,x,y+20);ctx.stroke();
+        ctx.strokeStyle="rgba(246,229,154,.08)";ctx.beginPath();ctx.moveTo(x+2,y+22);ctx.quadraticCurveTo(x+12,y+9,x+22,y+22);ctx.stroke();
+      }
     }
-    for(let i=0;i<14;i++){
-      const x=rand()*s,y=rand()*s,r=5+rand()*24;
-      const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,"rgba(64,55,22,.15)");g.addColorStop(1,"rgba(64,55,22,0)");
-      ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)
-    }
+    for(let i=0;i<900;i++){const a=.015+rand()*.045;ctx.fillStyle=`rgba(54,48,25,${a})`;ctx.fillRect(rand()*s,rand()*s,.5+rand()*2.2,.5+rand()*5)}
   })
 }
 function carpetTexture(rand){
   return canvasTexture((ctx,s)=>{
-    ctx.fillStyle="#777044";ctx.fillRect(0,0,s,s);
-    for(let i=0;i<3800;i++){
-      const v=60+Math.floor(rand()*58);ctx.fillStyle=`rgba(${v},${Math.max(35,v-8)},${Math.max(18,v-42)},.14)`;
-      ctx.fillRect(rand()*s,rand()*s,1,1)
+    ctx.fillStyle="#706844";ctx.fillRect(0,0,s,s);
+    for(let y=0;y<s;y+=3){ctx.fillStyle=y%6?"rgba(41,38,25,.08)":"rgba(188,171,105,.035)";ctx.fillRect(0,y,s,1)}
+    for(let i=0;i<6500;i++){
+      const base=55+Math.floor(rand()*65);ctx.fillStyle=`rgba(${base},${Math.max(35,base-5)},${Math.max(20,base-34)},${.08+rand()*.12})`;ctx.fillRect(rand()*s,rand()*s,1+rand(),1+rand())
     }
-    for(let y=0;y<s;y+=24){ctx.strokeStyle="rgba(39,35,20,.10)";ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(s,y);ctx.stroke()}
+    for(let i=0;i<14;i++){
+      const x=rand()*s,y=rand()*s,r=18+rand()*55;const stain=ctx.createRadialGradient(x,y,0,x,y,r);stain.addColorStop(0,"rgba(35,34,23,.12)");stain.addColorStop(1,"rgba(35,34,23,0)");ctx.fillStyle=stain;ctx.fillRect(x-r,y-r,r*2,r*2)
+    }
   })
 }
-function ceilingTexture(){
+function ceilingTexture(rand){
   return canvasTexture((ctx,s)=>{
-    ctx.fillStyle="#c7c4a9";ctx.fillRect(0,0,s,s);ctx.strokeStyle="rgba(70,70,58,.35)";ctx.lineWidth=2;
-    for(let i=0;i<=s;i+=64){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,s);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(s,i);ctx.stroke()}
-    for(let i=0;i<70;i++){ctx.fillStyle="rgba(92,84,47,.035)";ctx.fillRect(Math.random()*s,Math.random()*s,2+Math.random()*10,1+Math.random()*5)}
+    ctx.fillStyle="#c9c6aa";ctx.fillRect(0,0,s,s);
+    for(let i=0;i<1400;i++){const v=135+Math.floor(rand()*55);ctx.fillStyle=`rgba(${v},${v},${Math.max(110,v-16)},.12)`;ctx.fillRect(rand()*s,rand()*s,1,1)}
+    ctx.strokeStyle="rgba(66,65,52,.35)";ctx.lineWidth=3;
+    for(let i=0;i<=s;i+=128){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,s);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(s,i);ctx.stroke()}
   })
 }
-function signTexture(text,accent="#d4c071"){
-  const c=document.createElement("canvas");c.width=768;c.height=128;const ctx=c.getContext("2d");
-  ctx.fillStyle="#10110c";ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle=accent;ctx.lineWidth=4;ctx.strokeRect(5,5,c.width-10,c.height-10);
-  ctx.fillStyle="#eeeacb";ctx.font="700 40px monospace";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,384,64);
-  const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;return tex
+function labelTexture(text,accent="#c9b66a"){
+  const c=document.createElement("canvas");c.width=640;c.height=128;const ctx=c.getContext("2d");
+  ctx.fillStyle="#10120e";ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle=accent;ctx.lineWidth=3;ctx.strokeRect(4,4,c.width-8,c.height-8);
+  ctx.fillStyle="#e8e5d3";ctx.font="700 34px ui-monospace, monospace";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,320,64);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t
+}
+function stainTexture(rand){
+  const c=document.createElement("canvas");c.width=c.height=128;const ctx=c.getContext("2d");ctx.clearRect(0,0,128,128);
+  const x=64+(rand()-.5)*18,y=64+(rand()-.5)*18,r=30+rand()*24;const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,"rgba(34,31,18,.34)");g.addColorStop(.45,"rgba(43,39,22,.18)");g.addColorStop(1,"rgba(43,39,22,0)");ctx.fillStyle=g;ctx.fillRect(0,0,128,128);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t
 }
 
 export function createWorld(scene,seed="NULL"){
   const rand=seeded(seed),colliders=[],objects={},flickers=[],geoCache=new Map();
   let lastLightUpdate=0;
-  scene.background=new THREE.Color(0x242314);
-  scene.fog=new THREE.FogExp2(0x625c35,.0145);
+  scene.background=new THREE.Color(0x4d4930);
+  scene.fog=new THREE.FogExp2(0x625c3d,.0128);
 
-  const wallTex=wallpaperTexture(rand);wallTex.repeat.set(2.5,1.15);
-  const carpetTex=carpetTexture(rand);carpetTex.repeat.set(9,9);
-  const ceilingTex=ceilingTexture();ceilingTex.repeat.set(6,6);
-  const wallMat=new THREE.MeshLambertMaterial({map:wallTex,color:0xd9cf8b});
-  const lowerWallMat=new THREE.MeshLambertMaterial({color:0x55543c});
-  const carpetMat=new THREE.MeshLambertMaterial({map:carpetTex,color:0xa79f68});
-  const ceilingMat=new THREE.MeshLambertMaterial({map:ceilingTex,color:0xceccb2});
-  const metalMat=new THREE.MeshStandardMaterial({color:0x303833,roughness:.57,metalness:.42});
-  const darkMat=new THREE.MeshLambertMaterial({color:0x171914});
-  const glassMat=new THREE.MeshBasicMaterial({color:0x85a096,transparent:true,opacity:.12,depthWrite:false});
-  const amberMat=new THREE.MeshStandardMaterial({color:0xb99e3f,emissive:0x5d4611,emissiveIntensity:1.25,roughness:.45});
-  const greenMat=new THREE.MeshStandardMaterial({color:0x658e77,emissive:0x244c37,emissiveIntensity:1.2});
-  const redMat=new THREE.MeshStandardMaterial({color:0x8b3430,emissive:0x4a1110,emissiveIntensity:1.1});
-  const blackMat=new THREE.MeshBasicMaterial({color:0x080907});
+  const wallTex=wallpaperTexture(rand);wallTex.repeat.set(1.25,.78);
+  const carpetTex=carpetTexture(rand);carpetTex.repeat.set(14,14);
+  const ceilTex=ceilingTexture(rand);ceilTex.repeat.set(5,5);
 
-  scene.add(new THREE.HemisphereLight(0xfff5c3,0x49452c,1.12));
-  scene.add(new THREE.AmbientLight(0xb8ad74,.56));
+  const wallMat=new THREE.MeshStandardMaterial({map:wallTex,color:0xd2c47b,roughness:.92,metalness:0});
+  const carpetMat=new THREE.MeshStandardMaterial({map:carpetTex,color:0x91875a,roughness:.99,metalness:0});
+  const ceilingMat=new THREE.MeshStandardMaterial({map:ceilTex,color:0xd0cdb4,roughness:.96,metalness:0});
+  const trimMat=new THREE.MeshStandardMaterial({color:0x4d4c3d,roughness:.82});
+  const metalMat=new THREE.MeshStandardMaterial({color:0x303530,roughness:.52,metalness:.46});
+  const darkMetalMat=new THREE.MeshStandardMaterial({color:0x171a17,roughness:.68,metalness:.35});
+  const amberMat=new THREE.MeshStandardMaterial({color:0x9c8238,emissive:0x55400d,emissiveIntensity:.75,roughness:.52});
+  const greenMat=new THREE.MeshStandardMaterial({color:0x587966,emissive:0x173b29,emissiveIntensity:.7,roughness:.48});
+  const redMat=new THREE.MeshStandardMaterial({color:0x7f3431,emissive:0x3a0e0d,emissiveIntensity:.8,roughness:.48});
+  const glassMat=new THREE.MeshPhysicalMaterial({color:0x829b8f,roughness:.22,transmission:.18,transparent:true,opacity:.18,depthWrite:false});
 
-  function geo(w,h,d){const key=`${w}|${h}|${d}`;let g=geoCache.get(key);if(!g){g=new THREE.BoxGeometry(w,h,d);geoCache.set(key,g)}return g}
+  scene.add(new THREE.HemisphereLight(0xfff1b8,0x393522,.72));
+  scene.add(new THREE.AmbientLight(0x8f8967,.34));
+
+  function geo(w,h,d){const k=`${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}`;let g=geoCache.get(k);if(!g){g=new THREE.BoxGeometry(w,h,d);geoCache.set(k,g)}return g}
   function box(x,y,z,w,h,d,mat,collide=false){
     const m=new THREE.Mesh(geo(w,h,d),mat);m.position.set(x,y,z);m.castShadow=false;m.receiveShadow=false;scene.add(m);
     if(collide)colliders.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2});return m
   }
-  function sign(x,y,z,text,accent="#d4c071",scale=3.8){
-    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:signTexture(text,accent),transparent:true,depthTest:true,depthWrite:false}));
-    s.scale.set(scale,scale/6,1);s.position.set(x,y,z);scene.add(s);return s
+  function plaque(x,y,z,text,accent="#c9b66a",rotationY=Math.PI,scale=1){
+    const mat=new THREE.MeshBasicMaterial({map:labelTexture(text,accent),transparent:false,toneMapped:false});
+    const p=new THREE.Mesh(new THREE.PlaneGeometry(2.25*scale,.45*scale),mat);p.position.set(x,y,z);p.rotation.y=rotationY;scene.add(p);return p
   }
-  function beacon(x,y,z,color,intensity=5,distance=4){const l=new THREE.PointLight(color,intensity,distance,2);l.position.set(x,y,z);scene.add(l);return l}
+  function beacon(x,y,z,color,intensity=2.4,distance=4.8){const l=new THREE.PointLight(color,intensity,distance,2);l.position.set(x,y,z);scene.add(l);return l}
 
-  box(0,-.09,0,42,.18,42,carpetMat);
-  box(0,3.28,0,42,.16,42,ceilingMat);
+  box(0,-.08,0,41.3,.16,41.3,carpetMat,false);
+  box(0,3.15,0,41.3,.12,41.3,ceilingMat,false);
 
-  // Modular Level 0 maze. Wide enough for smooth two-player passing and full of loops instead of dead square rooms.
-  const walls=[
-    [0,1.55,-20.5,41,3.1,.5],[0,1.55,20.5,41,3.1,.5],[-20.5,1.55,0,.5,3.1,41],[20.5,1.55,0,.5,3.1,41],
-    [-10,1.55,-15,.38,3.1,10],[-10,1.55,3,.38,3.1,15],[-10,1.55,16,.38,3.1,7],
-    [10,1.55,-13,.38,3.1,15],[10,1.55,4,.38,3.1,11],[10,1.55,16,.38,3.1,7],
-    [-15,1.55,-8,10,.38,3.1],[1,1.55,-8,12,.38,3.1],[15,1.55,-8,10,.38,3.1],
-    [-16,1.55,8,9,.38,3.1],[-2,1.55,8,10,.38,3.1],[15,1.55,8,10,.38,3.1],
-    [-3,1.55,-1,.38,3.1,8],[4,1.55,1,.38,3.1,8],
-    [-15,1.55,14,6,.38,3.1],[-3,1.55,14,7,.38,3.1],[4,1.55,-15,8,.38,3.1],
-    [15,1.55,-3,.38,3.1,6],[-15,1.55,-2,.38,3.1,6]
-  ];
-  for(const v of walls){
-    box(...v,wallMat,true);const [x,,z,w,,d]=v;
-    if(w>d)box(x,.14,z,w,.28,d+.04,lowerWallMat);else box(x,.14,z,w+.04,.28,d,lowerWallMat)
+  const vWalls=Array.from({length:GRID+1},()=>Array(GRID).fill(true));
+  const hWalls=Array.from({length:GRID},()=>Array(GRID+1).fill(true));
+  const visited=Array.from({length:GRID},()=>Array(GRID).fill(false));
+  const stack=[[0,0]];visited[0][0]=true;
+  while(stack.length){
+    const [cx,cz]=stack[stack.length-1],ns=[];
+    if(cx>0&&!visited[cx-1][cz])ns.push([cx-1,cz,"L"]);
+    if(cx<GRID-1&&!visited[cx+1][cz])ns.push([cx+1,cz,"R"]);
+    if(cz>0&&!visited[cx][cz-1])ns.push([cx,cz-1,"D"]);
+    if(cz<GRID-1&&!visited[cx][cz+1])ns.push([cx,cz+1,"U"]);
+    if(!ns.length){stack.pop();continue}
+    const [nx,nz,dir]=ns[Math.floor(rand()*ns.length)];
+    if(dir==="L")vWalls[cx][cz]=false;else if(dir==="R")vWalls[cx+1][cz]=false;else if(dir==="D")hWalls[cx][cz]=false;else hWalls[cx][cz+1]=false;
+    visited[nx][nz]=true;stack.push([nx,nz])
+  }
+  for(let x=1;x<GRID;x++)for(let z=0;z<GRID;z++)if(vWalls[x][z]&&rand()<.48)vWalls[x][z]=false;
+  for(let x=0;x<GRID;x++)for(let z=1;z<GRID;z++)if(hWalls[x][z]&&rand()<.48)hWalls[x][z]=false;
+
+  const clearZones=[WORLD.HUMAN_SPAWN,WORLD.ANOMALY_SPAWN,WORLD.KEYCARD,WORLD.TERMINAL,WORLD.ARMORY,WORLD.MED,WORLD.GATE,WORLD.SEAL];
+  const nearClear=(x,z)=>clearZones.some(p=>Math.hypot(x-p.x,z-p.z)<1.8);
+  function wallSegment(x,z,horizontal,boundary=false){
+    if(!boundary&&nearClear(x,z))return;
+    const len=CELL+.12,thick=.18;
+    const door=!boundary&&rand()<.13;
+    const make=(px,pz,l)=>{
+      if(horizontal){box(px,WALL_H/2,pz,l,WALL_H,thick,wallMat,true);box(px,.105,pz,l+.03,.21,thick+.035,trimMat,false)}
+      else{box(px,WALL_H/2,pz,thick,WALL_H,l,wallMat,true);box(px,.105,pz,thick+.035,.21,l+.03,trimMat,false)}
+    };
+    if(!door){make(x,z,len);return}
+    const gap=1.35,piece=(len-gap)/2,off=(gap+piece)/2;
+    if(horizontal){make(x-off,z,piece);make(x+off,z,piece)}else{make(x,z-off,piece);make(x,z+off,piece)}
+  }
+  for(let x=0;x<=GRID;x++)for(let z=0;z<GRID;z++)if(vWalls[x][z]){
+    const px=-20+x*CELL,pz=-18+z*CELL;wallSegment(px,pz,false,x===0||x===GRID)
+  }
+  for(let x=0;x<GRID;x++)for(let z=0;z<=GRID;z++)if(hWalls[x][z]){
+    const px=-18+x*CELL,pz=-20+z*CELL;wallSegment(px,pz,true,z===0||z===GRID)
   }
 
-  // Familiar repeating columns make Level 0 harder to orient in without blocking corridors.
-  const columns=[[-17,-17],[-5,-17],[16,-17],[-17,-5],[-5,-5],[6,-5],[17,-1],[-17,5],[-5,5],[6,5],[17,15],[-17,17],[-5,17],[6,17]];
-  for(const [x,z] of columns){box(x,1.55,z,.66,3.1,.66,wallMat,true);box(x,.14,z,.76,.28,.76,lowerWallMat)}
-
-  // Repeated fluorescent ceiling panels: one instanced draw call, a smaller set of real lights.
-  const fixturePositions=[];
-  for(let x=-16;x<=16;x+=4)for(let z=-16;z<=16;z+=4)fixturePositions.push([x,z]);
-  const fixtures=new THREE.InstancedMesh(new THREE.BoxGeometry(2.35,.045,.16),new THREE.MeshBasicMaterial({color:0xfff8c9}),fixturePositions.length);
-  const dummy=new THREE.Object3D();fixturePositions.forEach(([x,z],i)=>{dummy.position.set(x,3.15,z);dummy.updateMatrix();fixtures.setMatrixAt(i,dummy.matrix)});scene.add(fixtures);
-  const lightPositions=[[-16,-16],[-4,-16],[8,-16],[16,-8],[-16,-4],[-4,-4],[8,-4],[16,4],[-16,8],[-4,8],[8,8],[16,16],[-12,16],[0,16]];
-  for(const [x,z] of lightPositions){const l=new THREE.PointLight(0xffed9d,8.5,9.5,2);l.position.set(x,2.92,z);scene.add(l);flickers.push({light:l,base:8.5,phase:rand()*20,broken:rand()<.18})}
-
-  // Ceiling leaks/stains and fake dark openings add depth without extra collision.
-  const stainMat=new THREE.MeshBasicMaterial({color:0x524d29,transparent:true,opacity:.24});
-  for(let i=0;i<22;i++)box(-18+rand()*36,3.18,-18+rand()*36,.5+rand()*2.4,.02,.4+rand()*1.7,stainMat);
-  for(const [x,z,w] of [[-19.95,-11,1.2],[-19.95,11,1.6],[19.95,2,1.1],[19.95,16,1.5]])box(x,1.3,z,.04,2.45,w,blackMat);
-
-  // A handful of visual-only abandoned props. They no longer snag the player collider.
-  for(let i=0;i<7;i++){
-    const x=-17+rand()*34,z=-17+rand()*34,h=.3+rand()*.45;
-    if(Math.hypot(x+14,z+14)<3||Math.hypot(x-WORLD.KEYCARD.x,z-WORLD.KEYCARD.z)<2.5)continue;
-    box(x,h/2,z,.35+rand()*.45,h,.35+rand()*.45,rand()>.5?darkMat:metalMat,false)
+  for(let x=-16;x<=16;x+=8)for(let z=-16;z<=16;z+=8){
+    if(nearClear(x,z)||rand()<.28)continue;
+    box(x,WALL_H/2,z,.48,WALL_H,.48,wallMat,true);box(x,.11,z,.57,.22,.57,trimMat,false)
   }
 
-  // Site-Null equipment is sparse on purpose: recognizable landmarks inside a mostly-liminal maze.
-  objects.armory=box(WORLD.ARMORY.x,.95,WORLD.ARMORY.z,1.05,1.9,.7,metalMat,true);
-  box(WORLD.ARMORY.x,1.18,WORLD.ARMORY.z-.37,.55,.18,.03,amberMat);sign(WORLD.ARMORY.x,2.15,WORLD.ARMORY.z-.38,"SECURITY LOCKER","#d4c071",3.3);beacon(WORLD.ARMORY.x,1.5,WORLD.ARMORY.z,0xc4a84b,3.5,3.6);
-  objects.med=box(WORLD.MED.x,.8,WORLD.MED.z,.95,1.6,.65,metalMat,true);
-  box(WORLD.MED.x,1.08,WORLD.MED.z-.34,.48,.27,.03,greenMat);sign(WORLD.MED.x,1.95,WORLD.MED.z-.34,"FIELD MEDICAL","#93c1a5",3.2);beacon(WORLD.MED.x,1.35,WORLD.MED.z,0x7fb497,3.5,3.6);
-  objects.keycardBase=box(WORLD.KEYCARD.x,.42,WORLD.KEYCARD.z,.85,.84,.85,darkMat,true);
-  objects.keycard=new THREE.Mesh(new THREE.BoxGeometry(.5,.045,.31),amberMat);objects.keycard.position.set(WORLD.KEYCARD.x,1.02,WORLD.KEYCARD.z);objects.keycard.rotation.x=.12;scene.add(objects.keycard);beacon(WORLD.KEYCARD.x,1.4,WORLD.KEYCARD.z,0xd3b760,4,3.5);
-  objects.terminal=box(WORLD.TERMINAL.x,1.02,WORLD.TERMINAL.z,.95,2.04,.7,metalMat,true);
-  box(WORLD.TERMINAL.x,1.42,WORLD.TERMINAL.z-.37,.58,.42,.03,greenMat);sign(WORLD.TERMINAL.x,2.16,WORLD.TERMINAL.z-.38,"THRESHOLD CONTROL","#93c1a5",3.4);beacon(WORLD.TERMINAL.x,1.5,WORLD.TERMINAL.z,0x72a98a,4,3.6);
-  box(10.15,1.45,15,.06,2.45,6.3,glassMat,true);sign(9.85,2.55,12.8,"ANOMALOUS HOLDING","#d86f67",3.4);
-  box(WORLD.GATE.x-1.85,1.55,WORLD.GATE.z,.55,3.1,.62,metalMat,true);box(WORLD.GATE.x+1.85,1.55,WORLD.GATE.z,.55,3.1,.62,metalMat,true);box(WORLD.GATE.x,3.02,WORLD.GATE.z,4.25,.28,.62,metalMat);
-  objects.gateDoor=box(WORLD.GATE.x,1.5,WORLD.GATE.z-.02,3.1,2.8,.28,darkMat,false);
-  objects.seal=box(WORLD.SEAL.x,.82,WORLD.SEAL.z,.78,1.64,.66,metalMat,true);box(WORLD.SEAL.x,1.14,WORLD.SEAL.z-.35,.5,.3,.03,redMat);beacon(WORLD.SEAL.x,1.35,WORLD.SEAL.z,0xa8433d,3.5,3.5);
-  sign(17.0,2.55,-14.35,"THRESHOLD / EXIT","#d4c071",3.8);
+  const fixtureGeo=new THREE.BoxGeometry(2.15,.035,.78),fixtureMat=new THREE.MeshStandardMaterial({color:0xf6efc9,emissive:0xffec9f,emissiveIntensity:1.7,roughness:.35});
+  const darkFixtureMat=new THREE.MeshStandardMaterial({color:0x8d896f,emissive:0x241f11,emissiveIntensity:.08,roughness:.62});
+  const lit=[],dead=[];
+  for(let x=-18;x<=18;x+=4)for(let z=-18;z<=18;z+=4){(rand()<.13?dead:lit).push([x,z,rand()>.5?0:Math.PI/2])}
+  function instancedFixtures(data,mat){
+    const im=new THREE.InstancedMesh(fixtureGeo,mat,data.length),o=new THREE.Object3D();
+    data.forEach(([x,z,r],i)=>{o.position.set(x,3.075,z);o.rotation.set(0,r,0);o.updateMatrix();im.setMatrixAt(i,o.matrix)});scene.add(im);return im
+  }
+  instancedFixtures(lit,fixtureMat);instancedFixtures(dead,darkFixtureMat);
+  for(let x=-16;x<=16;x+=8)for(let z=-16;z<=16;z+=8){
+    if(rand()<.16)continue;
+    const l=new THREE.PointLight(0xffe7a2,3.15,9.2,2);l.position.set(x,2.82,z);scene.add(l);flickers.push({light:l,base:3.15,phase:rand()*18,broken:rand()<.2})
+  }
 
-  // Less game-y signage near spawn. Tiny repeated sector markers deeper inside the maze.
-  sign(-5.0,2.45,-20.16,"LEVEL 0 // B-17","#d4c071",3.4);
-  sign(10.15,2.38,6.9,"RESTRICTED","#d86f67",2.7);
+  for(let i=0;i<18;i++){
+    const tex=stainTexture(rand),mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,toneMapped:false,opacity:.55});
+    const size=1.4+rand()*3.6,m=new THREE.Mesh(new THREE.PlaneGeometry(size,size*(.55+rand()*.4)),mat);m.position.set(-18+rand()*36,.011,-18+rand()*36);m.rotation.x=-Math.PI/2;m.rotation.z=rand()*Math.PI;scene.add(m)
+  }
+  for(let i=0;i<12;i++){
+    const tex=stainTexture(rand),mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,toneMapped:false,opacity:.42});
+    const size=.9+rand()*2.2,m=new THREE.Mesh(new THREE.PlaneGeometry(size,size),mat);m.position.set(-18+rand()*36,3.084,-18+rand()*36);m.rotation.x=Math.PI/2;m.rotation.z=rand()*Math.PI;scene.add(m)
+  }
+
+  for(let i=0;i<11;i++){
+    const x=-17+rand()*34,z=-17+rand()*34;if(nearClear(x,z))continue;
+    if(rand()<.55){
+      const h=.12+rand()*.16;const m=box(x,h/2,z,.55+rand()*.8,h,.35+rand()*.55,darkMetalMat,false);m.rotation.y=rand()*Math.PI
+    }else{
+      const m=box(x,.015,z,.7+rand()*.9,.03,.08+rand()*.08,new THREE.MeshStandardMaterial({color:0x9a8f56,roughness:.95}),false);m.rotation.y=rand()*Math.PI
+    }
+  }
+
+  objects.armory=box(WORLD.ARMORY.x,.94,WORLD.ARMORY.z,.92,1.88,.58,metalMat,true);
+  box(WORLD.ARMORY.x-.22,1.08,WORLD.ARMORY.z-.303,.025,.5,.025,darkMetalMat);box(WORLD.ARMORY.x+.22,1.08,WORLD.ARMORY.z-.303,.025,.5,.025,darkMetalMat);
+  plaque(WORLD.ARMORY.x,2.05,WORLD.ARMORY.z-.305,"SECURITY", "#c9b66a",Math.PI,.72);beacon(WORLD.ARMORY.x,1.42,WORLD.ARMORY.z-.5,0xc7aa52,1.4,3.4);
+
+  objects.med=box(WORLD.MED.x,.72,WORLD.MED.z,.82,1.44,.52,metalMat,true);
+  box(WORLD.MED.x,1.05,WORLD.MED.z-.275,.32,.08,.025,greenMat);box(WORLD.MED.x,1.05,WORLD.MED.z-.276,.08,.32,.025,greenMat);
+  plaque(WORLD.MED.x,1.75,WORLD.MED.z-.28,"MEDICAL", "#7fa990",Math.PI,.62);beacon(WORLD.MED.x,1.2,WORLD.MED.z-.45,0x6f9c82,1.35,3.2);
+
+  objects.keycardBase=box(WORLD.KEYCARD.x,.36,WORLD.KEYCARD.z,.62,.72,.62,darkMetalMat,true);
+  objects.keycard=new THREE.Mesh(new THREE.BoxGeometry(.42,.035,.26),amberMat);objects.keycard.position.set(WORLD.KEYCARD.x,.81,WORLD.KEYCARD.z);objects.keycard.rotation.set(.08,.35,.02);scene.add(objects.keycard);beacon(WORLD.KEYCARD.x,.98,WORLD.KEYCARD.z,0xd0b45a,1.7,3.1);
+
+  objects.terminal=box(WORLD.TERMINAL.x,.92,WORLD.TERMINAL.z,.9,1.84,.62,metalMat,true);
+  const screen=box(WORLD.TERMINAL.x,1.23,WORLD.TERMINAL.z-.321,.55,.37,.025,greenMat);objects.terminalScreen=screen;
+  plaque(WORLD.TERMINAL.x,2.02,WORLD.TERMINAL.z-.325,"THRESHOLD", "#7fa990",Math.PI,.7);beacon(WORLD.TERMINAL.x,1.32,WORLD.TERMINAL.z-.5,0x72a98a,1.55,3.6);
+
+  box(10.1,1.48,15,.045,2.45,5.5,glassMat,true);
+
+  box(WORLD.GATE.x-1.72,1.52,WORLD.GATE.z,.42,3.04,.58,metalMat,true);box(WORLD.GATE.x+1.72,1.52,WORLD.GATE.z,.42,3.04,.58,metalMat,true);box(WORLD.GATE.x,2.93,WORLD.GATE.z,3.85,.27,.58,metalMat,false);
+  objects.gateDoor=box(WORLD.GATE.x,1.48,WORLD.GATE.z-.015,2.95,2.72,.22,darkMetalMat,false);
+  const stripes=new THREE.MeshStandardMaterial({color:0xb59a45,roughness:.7});for(const sx of [-.95,-.45,.05,.55,1.05]){const bar=box(WORLD.GATE.x+sx,1.5,WORLD.GATE.z-.13,.14,2.55,.025,stripes,false);bar.rotation.z=.3}
+  plaque(WORLD.GATE.x,2.62,WORLD.GATE.z-.31,"EXIT / THRESHOLD", "#c9b66a",Math.PI,.76);
+
+  objects.seal=box(WORLD.SEAL.x,.75,WORLD.SEAL.z,.68,1.5,.56,metalMat,true);box(WORLD.SEAL.x,1.02,WORLD.SEAL.z-.295,.38,.24,.025,redMat);beacon(WORLD.SEAL.x,1.08,WORLD.SEAL.z-.45,0xa8433d,1.45,3.1);
 
   function update(time,round){
-    if(time-lastLightUpdate>95){
+    if(time-lastLightUpdate>70){
       lastLightUpdate=time;
-      for(const f of flickers){const dropout=f.broken&&Math.sin(time*.018+f.phase)>.95;f.light.intensity=dropout?.45:f.base*(.94+Math.sin(time*.0012+f.phase)*.06)}
+      for(const f of flickers){
+        let intensity=f.base*(.97+Math.sin(time*.0011+f.phase)*.03);
+        if(f.broken){const wave=Math.sin(time*.026+f.phase)+Math.sin(time*.071+f.phase*.7);if(wave>1.42)intensity*=.08;else if(wave>1.15)intensity*=.46}
+        f.light.intensity=intensity
+      }
+      if(objects.terminalScreen)objects.terminalScreen.material.emissiveIntensity=.62+Math.sin(time*.002)*.12
     }
     if(objects.keycard)objects.keycard.visible=!round?.keycardTaken;
-    if(objects.gateDoor){const open=round?.phase==="extraction"||round?.phase==="ended";objects.gateDoor.position.y=THREE.MathUtils.lerp(objects.gateDoor.position.y,open?3.65:1.5,.08)}
+    if(objects.gateDoor){
+      const open=round?.phase==="extraction"||round?.phase==="ended";
+      objects.gateDoor.position.y=THREE.MathUtils.lerp(objects.gateDoor.position.y,open?3.42:1.48,.075)
+    }
   }
   return{colliders,objects,update}
 }
 
-// Circle-vs-AABB movement with substeps. It slides along walls and does not snag on corners.
-export function resolveMovement(from,to,colliders,radius=.25){
-  const result=from.clone();
-  const dx=to.x-from.x,dz=to.z-from.z;
-  const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.09));
-  const sx=dx/steps,sz=dz/steps;
-  for(let i=0;i<steps;i++){
-    const nx=THREE.MathUtils.clamp(result.x+sx,-19.7,19.7);
-    if(!collidesCircle(nx,result.z,colliders,radius))result.x=nx;
-    const nz=THREE.MathUtils.clamp(result.z+sz,-19.7,19.7);
-    if(!collidesCircle(result.x,nz,colliders,radius))result.z=nz
-  }
-  return result
+function circleHitsAABB(x,z,r,c){
+  const nx=Math.max(c.minX,Math.min(x,c.maxX)),nz=Math.max(c.minZ,Math.min(z,c.maxZ));
+  const dx=x-nx,dz=z-nz;return dx*dx+dz*dz<r*r
 }
-function collidesCircle(x,z,colliders,r){
-  for(const c of colliders){
-    const qx=Math.max(c.minX,Math.min(x,c.maxX)),qz=Math.max(c.minZ,Math.min(z,c.maxZ));
-    const dx=x-qx,dz=z-qz;if(dx*dx+dz*dz<r*r)return true
+function blocked(x,z,colliders,r){for(const c of colliders)if(circleHitsAABB(x,z,r,c))return true;return false}
+export function resolveMovement(from,to,colliders,radius=.25){
+  const result=from.clone(),dx=to.x-from.x,dz=to.z-from.z;
+  const distance=Math.hypot(dx,dz),steps=Math.max(1,Math.ceil(distance/.055)),sx=dx/steps,sz=dz/steps;
+  for(let i=0;i<steps;i++){
+    const fullX=result.x+sx,fullZ=result.z+sz;
+    if(!blocked(fullX,fullZ,colliders,radius)){result.x=fullX;result.z=fullZ;continue}
+    if(!blocked(fullX,result.z,colliders,radius))result.x=fullX;
+    if(!blocked(result.x,fullZ,colliders,radius))result.z=fullZ
   }
-  return false
+  result.x=THREE.MathUtils.clamp(result.x,-19.62,19.62);result.z=THREE.MathUtils.clamp(result.z,-19.62,19.62);return result
 }
 
 export function nearestInteraction(position,round,self){
@@ -197,13 +252,13 @@ export function nearestInteraction(position,round,self){
   const checks=[];
   if(round.phase==="active"&&self.role!=="anomaly"&&!self.weapon&&(round.armoryCharges??0)>0)checks.push({kind:"armory",label:"OPEN SECURITY LOCKER",pos:WORLD.ARMORY,range:2});
   if(round.phase==="active"&&self.hp<self.maxHp&&(round.medCharges??0)>0)checks.push({kind:"med",label:"USE FIELD MEDICAL",pos:WORLD.MED,range:2});
-  if(round.phase==="active"&&!round.keycardTaken)checks.push({kind:"keycard",label:"RECOVER THRESHOLD KEYCARD",pos:WORLD.KEYCARD,range:1.8});
-  if(round.phase==="active"&&round.keycardTaken)checks.push({kind:"terminal",label:"INITIATE THRESHOLD EXTRACTION",pos:WORLD.TERMINAL,range:2});
+  if(round.phase==="active"&&!round.keycardTaken)checks.push({kind:"keycard",label:"TAKE THRESHOLD KEYCARD",pos:WORLD.KEYCARD,range:1.8});
+  if(round.phase==="active"&&round.keycardTaken)checks.push({kind:"terminal",label:"OPEN THRESHOLD",pos:WORLD.TERMINAL,range:2});
   if(round.phase==="extraction"){
     checks.push({kind:"extract",label:"CROSS THRESHOLD",pos:WORLD.GATE,range:2.4});
     if(self.role==="quarantine"||self.role==="security")checks.push({kind:"seal",label:"SEAL THRESHOLD",pos:WORLD.SEAL,range:2})
   }
-  let best=null,bestD=999;
-  for(const c of checks){const d=position.distanceTo(c.pos);if(d<c.range&&d<bestD){best=c;bestD=d}}
+  let best=null,bestD=Infinity;
+  for(const c of checks){const d=Math.hypot(position.x-c.pos.x,position.z-c.pos.z);if(d<c.range&&d<bestD){best=c;bestD=d}}
   return best
 }
