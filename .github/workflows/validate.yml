@@ -30,6 +30,8 @@ jobs:
           node --check client/combat_polish.js
           node --check client/remote_polish.js
           node --check client/scavenge.js
+          node --check client/spectator.js
+          node --check client/inventory.js
 
   worker:
     runs-on: ubuntu-latest
