@@ -29,6 +29,7 @@ jobs:
           node --check client/tension_director.js
           node --check client/combat_polish.js
           node --check client/remote_polish.js
+          node --check client/scavenge.js
 
   worker:
     runs-on: ubuntu-latest
