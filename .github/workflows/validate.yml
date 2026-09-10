@@ -21,6 +21,7 @@ jobs:
           node --check client/voice.js
           node --check client/world.js
           node --check client/props.js
+          node --check client/liminal_fx.js
 
   worker:
     runs-on: ubuntu-latest
