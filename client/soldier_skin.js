@@ -8,6 +8,23 @@ const ready=loader.loadAsync(URL).then(g=>{asset=g;for(const group of pending.sp
 
 function clip(clips,...terms){for(const t of terms){const c=clips.find(v=>v.name.toLowerCase().includes(t));if(c)return c}return null}
 function setAction(entry,name,fade=.18){const a=entry.actions[name]||entry.actions.idle;if(!a||entry.active===a)return;const old=entry.active;a.reset().fadeIn(fade).play();if(old)old.fadeOut(fade);entry.active=a}
+
+// Build 001 had an order-of-operations bug: Soldier.die() marked alive=false before calling fall(),
+// while fall() rejected non-alive soldiers. Patch the prototype as soon as the first Soldier group exists,
+// allowing permanent deaths to enter the same Rapier ragdoll path while leaving recoverable knockdowns alone.
+function ensureDeathPhysics(soldier){
+  const proto=Object.getPrototypeOf(soldier);if(!proto||proto.__ghostcamDeathPhysics)return;const originalFall=proto.fall;if(typeof originalFall!=="function")return;
+  proto.fall=function(dir,recoverable){
+    if(this.ragdoll)return;
+    if(!this.alive&&!recoverable){
+      this.alive=true;
+      try{return originalFall.call(this,dir,false)}finally{this.alive=false;if(this.ragdoll){this.ragdoll.recoverable=false;this.ragdoll.dead=true}}
+    }
+    return originalFall.call(this,dir,recoverable)
+  };
+  Object.defineProperty(proto,"__ghostcamDeathPhysics",{value:true,configurable:false});
+}
+
 function attach(group){
   if(!asset||group.userData.cc0Skin||!group.userData.soldier)return;group.userData.cc0Skin=true;
   const originals=[];group.traverse(o=>{if(o.isMesh)originals.push(o)});
@@ -20,7 +37,7 @@ function attach(group){
 }
 
 const originalAdd=THREE.Scene.prototype.add;
-THREE.Scene.prototype.add=function(...objects){const result=originalAdd.apply(this,objects);for(const o of objects){if(o?.userData?.soldier){if(asset)attach(o);else pending.push(o)}}return result};
+THREE.Scene.prototype.add=function(...objects){const result=originalAdd.apply(this,objects);for(const o of objects){if(o?.userData?.soldier){ensureDeathPhysics(o.userData.soldier);if(asset)attach(o);else pending.push(o)}}return result};
 
 let last=performance.now();function loop(now){const dt=Math.min(.05,(now-last)/1000||.016);last=now;for(let i=animated.length-1;i>=0;i--){const e=animated[i];if(!e.group.parent){animated.splice(i,1);continue}const d=e.group.position.distanceTo(e.last);e.speed=THREE.MathUtils.lerp(e.speed,d/Math.max(dt,.001),1-Math.exp(-dt*8));e.last.copy(e.group.position);if(e.mixer)e.mixer.update(dt);if(!e.group.visible)continue;if(e.speed>2.4)setAction(e,"run");else if(e.speed>.25)setAction(e,"walk");else setAction(e,"idle")}requestAnimationFrame(loop)}requestAnimationFrame(loop);
 
