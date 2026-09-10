@@ -18,6 +18,7 @@ jobs:
           node --check client/game.js
           node --check client/network.js
           node --check client/audio.js
+          node --check client/voice.js
           node --check client/world.js
 
   worker:
