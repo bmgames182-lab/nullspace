@@ -24,6 +24,7 @@ jobs:
           node --check client/liminal_fx.js
           node --check client/feedback_fx.js
           node --check client/setpieces.js
+          node --check client/level0_detail.js
 
   worker:
     runs-on: ubuntu-latest
