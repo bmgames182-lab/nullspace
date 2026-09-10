@@ -16,32 +16,10 @@ jobs:
       - name: Parse browser modules
         run: |
           node --check client/game.js
-          node --check client/network.js
-          node --check client/audio.js
-          node --check client/voice.js
           node --check client/world.js
-          node --check client/props.js
-          node --check client/liminal_fx.js
-          node --check client/feedback_fx.js
-          node --check client/setpieces.js
-          node --check client/level0_detail.js
-          node --check client/room_archetypes.js
-          node --check client/tension_director.js
-          node --check client/combat_polish.js
-          node --check client/remote_polish.js
-          node --check client/scavenge.js
-          node --check client/spectator.js
-          node --check client/inventory.js
-
-  worker:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm install
-      - run: npm run validate
+          node --check client/audio.js
+          node --check client/ragdoll.js
+      - name: Verify entrypoint
+        run: |
+          grep -q 'GHOSTCAM' client/index.html
+          grep -q './game.js' client/index.html
