@@ -22,6 +22,9 @@ export class VoiceSystem {
     this.enabled = true;
     this.applyMicState();
     this.syncPeers();
+    for (const [id] of this.getPlayers()) {
+      if (id !== this.net.id) this.net.voiceSignal(id, { hello: true });
+    }
     return true;
   }
 
@@ -86,23 +89,27 @@ export class VoiceSystem {
       if (["failed","closed"].includes(pc.connectionState)) this.dropPeer(id);
     };
 
-    if (initiator) {
-      setTimeout(async () => {
-        try {
-          if (pc.signalingState !== "stable") return;
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          this.net.voiceSignal(id, { description: pc.localDescription });
-        } catch {}
-      }, 250);
-    }
+    if (initiator) setTimeout(() => this.makeOffer(id, pc), 250);
     return pc;
+  }
+
+  async makeOffer(id, pc) {
+    try {
+      if (!this.enabled || pc.signalingState !== "stable") return;
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      this.net.voiceSignal(id, { description: pc.localDescription });
+    } catch {}
   }
 
   async handleSignal(from, payload) {
     if (!this.enabled || !from || !payload) return;
     const pc = this.peers.get(from) || this.createPeer(from, false);
     try {
+      if (payload.hello) {
+        if (this.net.id < from) await this.makeOffer(from, pc);
+        return;
+      }
       if (payload.description) {
         const desc = payload.description;
         if (desc.type === "offer" && pc.signalingState !== "stable") {
