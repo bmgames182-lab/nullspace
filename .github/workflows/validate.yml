@@ -23,6 +23,7 @@ jobs:
           node --check client/props.js
           node --check client/liminal_fx.js
           node --check client/feedback_fx.js
+          node --check client/setpieces.js
 
   worker:
     runs-on: ubuntu-latest
