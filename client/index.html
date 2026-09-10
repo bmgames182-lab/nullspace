@@ -19,12 +19,12 @@
 <body>
   <div id="boot" class="overlay">
     <div class="boot-card">
-      <div class="eyebrow">TACTICAL BODY CAMERA SIMULATION // BUILD 002</div>
+      <div class="eyebrow">TACTICAL BODY CAMERA SIMULATION // BUILD 003</div>
       <h1>GHOST<span>CAM</span></h1>
-      <p>Close-quarters AI firefights with physics-driven hit reactions and articulated ragdolls. Original browser prototype inspired by modern bodycam shooters.</p>
+      <p>Close-quarters AI firefights with physics-driven hit reactions, suppression, grenades and articulated ragdolls. Original browser prototype inspired by modern bodycam shooters.</p>
       <button id="deployBtn" class="primary">DEPLOY TO LIVE FIRE</button>
       <button id="bootSettingsBtn">SETTINGS</button>
-      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · LMB FIRE · R RELOAD · F LIGHT · ESC MENU</div>
+      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · LMB FIRE · G FRAG · R RELOAD · F LIGHT · ESC MENU</div>
       <div id="bootStatus">Physics engine waiting for deployment.</div>
     </div>
   </div>
@@ -62,12 +62,13 @@
     <div id="feed"></div>
     <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">COMBAT EFFECTIVE</small></div>
     <div class="ammo"><b id="ammo">30</b><span>/</span><b id="reserve">120</b><small>5.56×45</small></div>
-    <div class="help">F LIGHT · R RELOAD · RMB AIM · ESC MENU</div>
+    <div class="help">F LIGHT · G FRAG · R RELOAD · RMB AIM · ESC MENU</div>
     <div id="deathCard" hidden><b>BODYCAM SIGNAL LOST</b><span>Press SPACE to redeploy</span></div>
   </div>
 
   <canvas id="game"></canvas>
   <script type="module" src="./soldier_skin.js"></script>
+  <script type="module" src="./combat_plus.js"></script>
   <script type="module" src="./game.js"></script>
 </body>
 </html>
