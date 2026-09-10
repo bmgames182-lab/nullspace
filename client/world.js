@@ -10,12 +10,21 @@ function canvasTexture(base,noise=24){
   for(let i=0;i<7600;i++){const light=Math.random()>.5,a=.025+Math.random()*.06;x.fillStyle=light?`rgba(255,255,255,${a})`:`rgba(0,0,0,${a})`;x.fillRect(Math.random()*512,Math.random()*512,1+Math.random()*3,1+Math.random()*3)}
   const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;t.colorSpace=THREE.SRGBColorSpace;return t
 }
+function prepareMap(t,repeat,color=false){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(repeat,repeat);t.anisotropy=8;if(color)t.colorSpace=THREE.SRGBColorSpace;return t}
+function attachPolyHaven(material,id,repeat){
+  const loader=new THREE.TextureLoader(),base=`https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/${id}/${id}`;
+  loader.load(`${base}_diff_1k.jpg`,t=>{material.map=prepareMap(t,repeat,true);material.color.setHex(0xffffff);material.needsUpdate=true},undefined,()=>{});
+  loader.load(`${base}_nor_gl_1k.jpg`,t=>{material.normalMap=prepareMap(t,repeat);material.normalScale.set(.58,.58);material.needsUpdate=true},undefined,()=>{});
+  loader.load(`${base}_rough_1k.jpg`,t=>{material.roughnessMap=prepareMap(t,repeat);material.roughness=.95;material.needsUpdate=true},undefined,()=>{});
+}
 
 export function buildArena(scene,physics,RAPIER,{highQuality=true}={}){
   const obstacles=[],dynamicProps=[],shootableMeshes=[];
   scene.background=new THREE.Color(0x727b77);scene.fog=new THREE.Fog(0x727b77,30,100);
   const groundTex=canvasTexture("#535852",34);groundTex.repeat.set(18,18);const concreteTex=canvasTexture("#73766f",28);concreteTex.repeat.set(2,2);
   const groundMat=new THREE.MeshStandardMaterial({map:groundTex,color:0x747a73,roughness:.98}),concrete=new THREE.MeshStandardMaterial({map:concreteTex,color:0x898d85,roughness:.94}),darkConcrete=new THREE.MeshStandardMaterial({color:0x353a37,roughness:.96}),metal=new THREE.MeshStandardMaterial({color:0x394347,roughness:.66,metalness:.5}),blueMetal=new THREE.MeshStandardMaterial({color:0x3b5058,roughness:.78,metalness:.35}),rust=new THREE.MeshStandardMaterial({color:0x5b4035,roughness:.91,metalness:.2}),tarp=new THREE.MeshStandardMaterial({color:0x475047,roughness:.96}),sand=new THREE.MeshStandardMaterial({color:0x81785b,roughness:1});
+  // Real CC0 surface detail upgrades the procedural fallback once the small 1K maps arrive.
+  attachPolyHaven(groundMat,"asphalt_01",14);attachPolyHaven(concrete,"concrete_floor_worn_001",2.25);
   scene.add(new THREE.HemisphereLight(0xd9e1dc,0x222826,1.5));const sun=new THREE.DirectionalLight(0xfff3dc,2.55);sun.position.set(-19,35,-14);sun.target.position.set(0,0,0);scene.add(sun,sun.target);sun.castShadow=highQuality;if(highQuality){sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-39;sun.shadow.camera.right=39;sun.shadow.camera.top=39;sun.shadow.camera.bottom=-39;sun.shadow.camera.near=1;sun.shadow.camera.far=82;sun.shadow.bias=-.00025}
 
   function fixedBox(x,y,z,w,h,d,mat=concrete,collide=true){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);mesh.position.set(x,y,z);mesh.receiveShadow=highQuality;mesh.castShadow=highQuality&&h>.7;scene.add(mesh);if(collide){const rb=physics.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x,y,z));physics.createCollider(RAPIER.ColliderDesc.cuboid(w/2,h/2,d/2).setFriction(.9),rb);obstacles.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2,mesh})}shootableMeshes.push(mesh);return mesh}
