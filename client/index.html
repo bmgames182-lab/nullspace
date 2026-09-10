@@ -3,73 +3,70 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#15170f" />
-  <title>NULLSPACE // Site-Null</title>
+  <meta name="theme-color" content="#080909" />
+  <title>GHOSTCAM // Live Fire</title>
   <link rel="stylesheet" href="./styles.css" />
   <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
-      }
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "@dimforge/rapier3d-compat": "https://esm.sh/@dimforge/rapier3d-compat@0.19.0"
     }
+  }
   </script>
 </head>
 <body>
-  <div id="menu" class="screen">
-    <div class="noise"></div>
-    <div class="menuShell">
-      <section class="brandBlock">
-        <div class="agency">AEGIS CONTAINMENT DIRECTORATE // SITE-NULL</div>
-        <h1>NULL<span>SPACE</span></h1>
-        <p class="tagline">The halls are wrong. So are some of the people in them.</p>
-        <div class="warning">LEVEL-4 INCIDENT // LIMINAL CONTAINMENT BREACH</div>
-      </section>
-      <section class="panel terminalPanel">
-        <div class="panelHeader"><span>INCIDENT TERMINAL</span><span class="onlineDot">● RELAY ONLINE</span></div>
-        <label for="nameInput">OPERATIVE CALLSIGN</label>
-        <input id="nameInput" maxlength="18" value="xenolmorph" autocomplete="off" />
-        <label for="roomInput">INCIDENT CODE</label>
-        <input id="roomInput" maxlength="8" placeholder="N7K2A" autocomplete="off" />
-        <div class="row"><button id="createBtn" class="primary">CREATE LOBBY</button><button id="joinBtn">JOIN LOBBY</button></div>
-        <button id="menuSettingsBtn" class="wide ghost">SETTINGS</button>
-        <p id="status" aria-live="polite">Terminal ready.</p>
-        <details><summary>Network configuration</summary><label for="workerInput">MULTIPLAYER WORKER</label><input id="workerInput" value="https://nullspace.bmgames182.workers.dev" autocomplete="off" spellcheck="false" /></details>
-      </section>
-      <aside class="intel panel"><div class="panelHeader"><span>FIELD DIRECTIVE</span><span>REV 05</span></div><p><b>Trust nobody automatically.</b> A Mimic can wear a human face.</p><p>Recover the Threshold Keycard, open extraction, and stop the anomaly crossing with you.</p><p class="muted">Best experienced with proximity voice enabled.</p></aside>
+  <div id="boot" class="overlay">
+    <div class="boot-card">
+      <div class="eyebrow">TACTICAL BODY CAMERA SIMULATION // BUILD 001</div>
+      <h1>GHOST<span>CAM</span></h1>
+      <p>Close-quarters AI firefights with physics-driven hit reactions and articulated ragdolls. This is an original browser prototype, not a copy of BODYCAM.</p>
+      <button id="deployBtn" class="primary">DEPLOY TO LIVE FIRE</button>
+      <button id="bootSettingsBtn">SETTINGS</button>
+      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · LMB FIRE · R RELOAD · F LIGHT · ESC MENU</div>
+      <div id="bootStatus">Physics engine waiting for deployment.</div>
     </div>
   </div>
 
-  <div id="lobby" class="overlay" hidden>
-    <div class="lobbyCard panel">
-      <div class="panelHeader"><span>INCIDENT LOBBY</span><span id="lobbyHostBadge">HOST: ---</span></div>
-      <div class="lobbyTop"><div><div class="tinyLabel">INCIDENT CODE</div><div id="lobbyCode" class="bigCode">-----</div></div><button id="copyCodeBtn" class="small">COPY CODE</button></div>
-      <div class="lobbyGrid"><div><div class="tinyLabel sectionLabel">OPERATIVES</div><div id="lobbyPlayers" class="playerList"></div></div><div class="lobbySide"><div class="tinyLabel sectionLabel">DEPLOYMENT</div><div class="settingLine"><span>MAP</span><b>LEVEL 0 // SITE-NULL</b></div><div class="settingLine"><span>MAX PLAYERS</span><b>12</b></div><div class="settingLine"><span>ROLE MODE</span><b>HIDDEN MIMIC</b></div><button id="voiceBtn" class="wide">ENABLE PROXIMITY VOICE</button><div id="voiceState" class="microText">Voice is off. Browser mic permission is required.</div></div></div>
-      <div class="lobbyActions"><button id="readyBtn" class="primary">READY</button><button id="startBtn">START INCIDENT</button><button id="leaveLobbyBtn" class="dangerBtn">LEAVE</button></div>
-      <div id="lobbyStatus" class="lobbyStatus">Waiting for host.</div>
+  <div id="pause" class="overlay" hidden>
+    <div class="pause-card">
+      <div class="eyebrow">BODYCAM FEED PAUSED</div>
+      <h2>GHOSTCAM</h2>
+      <button id="resumeBtn" class="primary">RESUME</button>
+      <button id="pauseSettingsBtn">SETTINGS</button>
+      <button id="restartBtn">RESTART SKIRMISH</button>
     </div>
   </div>
 
-  <div id="briefing" class="briefing" hidden><div class="briefCard"><div class="agency">CLASSIFIED ASSIGNMENT</div><div id="briefRole" class="briefRole">RESEARCH PERSONNEL</div><p id="briefText"></p><div id="briefLoadout" class="briefLoadout"></div><button id="briefDismiss" class="primary">ACKNOWLEDGE</button></div></div>
-  <div id="pauseMenu" class="pauseOverlay" hidden><div class="pauseCard panel"><div class="agency">INCIDENT PAUSED LOCALLY</div><h2>NULLSPACE</h2><button id="resumeBtn" class="primary wide">RESUME</button><button id="pauseSettingsBtn" class="wide">SETTINGS</button><button id="leaveMatchBtn" class="wide dangerBtn">LEAVE INCIDENT</button><div class="microText">ESC opens this menu. Other players are still moving.</div></div></div>
-  <div id="settingsPanel" class="settingsOverlay" hidden><div class="settingsCard panel"><div class="panelHeader"><span>SETTINGS</span><button id="closeSettingsBtn" class="xBtn">×</button></div><div class="settingsGrid"><label>MOUSE SENSITIVITY <span id="sensitivityValue"></span><input id="sensitivitySetting" type="range" min="0.3" max="1.6" step="0.05"></label><label>FIELD OF VIEW <span id="fovValue"></span><input id="fovSetting" type="range" min="65" max="100" step="1"></label><label>RENDER SCALE <span id="renderValue"></span><input id="renderSetting" type="range" min="0.55" max="1.25" step="0.05"></label><label>BRIGHTNESS <span id="brightnessValue"></span><input id="brightnessSetting" type="range" min="0.7" max="1.5" step="0.05"></label><label>MASTER VOLUME <span id="volumeValue"></span><input id="volumeSetting" type="range" min="0" max="1" step="0.05"></label><label>VOICE VOLUME <span id="voiceVolumeValue"></span><input id="voiceVolumeSetting" type="range" min="0" max="1" step="0.05"></label><label>FPS CAP<select id="fpsSetting"><option value="0">Unlimited</option><option value="60">60</option><option value="90">90</option><option value="120">120</option><option value="144">144</option></select></label><label class="checkLine"><input id="pttSetting" type="checkbox"> PUSH-TO-TALK (V)</label></div><div class="controlsCard"><b>CONTROLS</b><span>WASD Move</span><span>Shift Sprint</span><span>Ctrl Crouch</span><span>F Flashlight</span><span>E Interact</span><span>X Inspect Loadout</span><span>R Reload</span><span>Q Mimic Ability</span><span>ESC Game Menu</span><span>V Push-to-talk</span></div></div></div>
-  <div id="endScreen" class="briefing" hidden><div class="briefCard endCard"><div class="agency">INCIDENT RESOLUTION</div><div id="endTitle" class="briefRole">CONTAINMENT RESTORED</div><p id="endText"></p><button id="endLobbyBtn" class="primary">RETURN TO LOBBY</button><div id="endWait" class="microText"></div></div></div>
+  <div id="settings" class="overlay" hidden>
+    <div class="settings-card">
+      <div class="settings-head"><div><div class="eyebrow">DEVICE CONFIG</div><h2>SETTINGS</h2></div><button id="closeSettingsBtn" class="close">×</button></div>
+      <div class="settings-grid">
+        <label>SENSITIVITY <span id="sensValue"></span><input id="sens" type="range" min="0.25" max="1.8" step="0.05"></label>
+        <label>FIELD OF VIEW <span id="fovValue"></span><input id="fov" type="range" min="70" max="110" step="1"></label>
+        <label>RENDER SCALE <span id="scaleValue"></span><input id="scale" type="range" min="0.55" max="1.25" step="0.05"></label>
+        <label>MASTER VOLUME <span id="volumeValue"></span><input id="volume" type="range" min="0" max="1" step="0.05"></label>
+        <label>BODYCAM SHAKE <span id="shakeValue"></span><input id="shake" type="range" min="0" max="1.4" step="0.1"></label>
+        <label>AI COUNT <span id="aiValue"></span><input id="aiCount" type="range" min="4" max="18" step="2"></label>
+      </div>
+      <div class="setting-checks"><label><input id="bloodSetting" type="checkbox"> BLOOD FX</label><label><input id="qualitySetting" type="checkbox"> HIGH QUALITY LIGHTING</label></div>
+    </div>
+  </div>
 
-  <div id="hud" hidden><div class="vignette"></div><div id="damageFlash"></div><div id="crosshair"><i></i><i></i><i></i><i></i></div><div id="topLeft" class="hudBlock"><div class="tinyLabel">INCIDENT</div><div id="roomLabel">-----</div><div class="hudSub"><span id="playerCount">1 OPERATIVE</span><span id="phaseLabel">LOBBY</span></div></div><div id="rolePanel" class="hudBlock"><div class="tinyLabel">ASSIGNMENT</div><div id="roleLabel">UNASSIGNED</div><div id="objectiveLabel">Awaiting deployment.</div></div><div id="timer" class="hudBlock">00:00</div><div id="bottomLeft" class="hudBlock statusBlock"><div class="vitals"><div><span>VITALS</span><b id="hp">100</b></div><div><span>STAMINA</span><b id="stamina">100</b></div></div><div class="hint">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · F LIGHT · E INTERACT · X LOADOUT · Q ABILITY · R RELOAD · ESC MENU</div></div><div id="ammo" class="hudBlock"><span id="ammoCurrent">0</span><small>/</small><span id="ammoReserve">0</span><em>9×19</em></div><div id="feed"></div><div id="interaction" hidden>[ E ] INTERACT</div><div id="centerNotice" hidden></div><div id="voiceIndicator" hidden>VOICE</div></div>
+  <div id="hud" hidden>
+    <div class="lens"></div><div class="scanlines"></div><div id="damage"></div>
+    <div class="rec"><b>● REC</b><span id="clock">00:00:00</span><small>BC-07 // UNIT ALPHA</small></div>
+    <div class="mission"><small>LIVE FIRE // COMPOUND 17</small><strong id="objective">ELIMINATE HOSTILE FORCE</strong><span id="teams">BLUE 0 · RED 0</span></div>
+    <div id="crosshair"><i></i></div><div id="hitmarker">×</div>
+    <div id="feed"></div>
+    <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">COMBAT EFFECTIVE</small></div>
+    <div class="ammo"><b id="ammo">30</b><span>/</span><b id="reserve">120</b><small>5.56×45</small></div>
+    <div class="help">F LIGHT · R RELOAD · RMB AIM · ESC MENU</div>
+    <div id="deathCard" hidden><b>BODYCAM SIGNAL LOST</b><span>Press SPACE to redeploy</span></div>
+  </div>
 
   <canvas id="game"></canvas>
-  <script type="module" src="./liminal_fx.js"></script>
-  <script type="module" src="./props.js"></script>
-  <script type="module" src="./setpieces.js"></script>
-  <script type="module" src="./level0_detail.js"></script>
-  <script type="module" src="./room_archetypes.js"></script>
-  <script type="module" src="./feedback_fx.js"></script>
-  <script type="module" src="./tension_director.js"></script>
-  <script type="module" src="./combat_polish.js"></script>
-  <script type="module" src="./remote_polish.js"></script>
-  <script type="module" src="./scavenge.js"></script>
-  <script type="module" src="./spectator.js"></script>
-  <script type="module" src="./inventory.js"></script>
   <script type="module" src="./game.js"></script>
 </body>
 </html>
