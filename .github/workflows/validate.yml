@@ -25,6 +25,10 @@ jobs:
           node --check client/feedback_fx.js
           node --check client/setpieces.js
           node --check client/level0_detail.js
+          node --check client/room_archetypes.js
+          node --check client/tension_director.js
+          node --check client/combat_polish.js
+          node --check client/remote_polish.js
 
   worker:
     runs-on: ubuntu-latest
