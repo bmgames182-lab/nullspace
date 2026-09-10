@@ -19,8 +19,17 @@ NULLSPACE uses original code and procedural materials plus the permissively lice
 - License: CC0 1.0
 - Runtime mirror used by the browser build: `Nazarwadim/School-Hooligan` via jsDelivr
 
+## Kenney — Furniture Kit 2.1
+
+- Used for: abandoned Level 0 room dressing — desks, office chairs, bookcases, cardboard boxes, radios, trash cans and vintage televisions
+- Creator: Kenney
+- Pack: Furniture Kit 2.1
+- License: Creative Commons Zero (CC0); the included license explicitly permits personal, educational and commercial use
+- Runtime mirror used by the browser build: `eturner58/game-assets` via jsDelivr
+- Format: small GLB models from `Models/GLTF format/`
+
 ## Notes
 
-Wallpaper, carpet, ceiling tiles, stains and most environment geometry are generated procedurally in the client. The browser keeps procedural fallbacks for remote avatars and sound effects so a third-party CDN failure does not stop the scene from loading.
+Wallpaper, carpet, ceiling tiles, stains and most environment geometry are generated procedurally in the client. Furniture is loaded asynchronously and is intentionally non-blocking: if the CDN is unavailable, gameplay still starts. The browser also keeps procedural fallbacks for remote avatars and sound effects.
 
 Asset authors are not affiliated with or endorsing NULLSPACE. Attribution is included for provenance even though CC0 does not require it.
