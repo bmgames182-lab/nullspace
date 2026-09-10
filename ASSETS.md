@@ -28,8 +28,26 @@ NULLSPACE uses original code and procedural materials plus the permissively lice
 - Runtime mirror used by the browser build: `eturner58/game-assets` via jsDelivr
 - Format: small GLB models from `Models/GLTF format/`
 
+## Poly Haven — Dirty Carpet
+
+- Used for: 1K carpet diffuse and OpenGL normal maps
+- Asset: `dirty_carpet`
+- Author: Rohit Seervi
+- Original asset: https://polyhaven.com/a/dirty_carpet
+- License: CC0
+- Runtime files: `dl.polyhaven.org`, 1K JPG variants only
+
+## Poly Haven — Decrepit Wallpaper
+
+- Used for: 1K OpenGL normal map layered over NULLSPACE's generated yellow wallpaper pattern
+- Asset: `decrepit_wallpaper`
+- Author: Rob Tuytel
+- Original asset: https://polyhaven.com/a/decrepit_wallpaper
+- License: CC0
+- Runtime files: `dl.polyhaven.org`, 1K JPG variants only
+
 ## Notes
 
-Wallpaper, carpet, ceiling tiles, stains and most environment geometry are generated procedurally in the client. Furniture is loaded asynchronously and is intentionally non-blocking: if the CDN is unavailable, gameplay still starts. The browser also keeps procedural fallbacks for remote avatars and sound effects.
+Wallpaper colour/pattern, ceiling tiles, stains and most environment geometry remain procedural. The Poly Haven maps add real surface variation without replacing the Level 0 colour language. Furniture and PBR maps load asynchronously and are intentionally non-blocking: if a CDN is unavailable, gameplay still starts with procedural fallbacks. The browser also keeps fallback remote avatars and synthesized sound effects.
 
 Asset authors are not affiliated with or endorsing NULLSPACE. Attribution is included for provenance even though CC0 does not require it.
