@@ -18,9 +18,7 @@ export class NetClient {
     return new Promise((resolve, reject) => {
       let settled = false;
       const rawBase = String(baseUrl || "").trim();
-      const normalizedBase = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(rawBase)
-        ? rawBase
-        : `https://${rawBase}`;
+      const normalizedBase = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(rawBase) ? rawBase : `https://${rawBase}`;
       const url = new URL(normalizedBase);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.pathname = "/room/" + encodeURIComponent(room);
@@ -29,14 +27,13 @@ export class NetClient {
       const ws = new WebSocket(url);
       this.ws = ws;
       this.room = room;
-
       const timeout = setTimeout(() => {
         if (!settled) {
           settled = true;
           try { ws.close(); } catch {}
           reject(new Error("Connection timed out"));
         }
-      }, 8000);
+      }, 9000);
 
       ws.addEventListener("open", () => this.onOpen());
       ws.addEventListener("error", () => {
@@ -69,10 +66,7 @@ export class NetClient {
 
         if (msg.type === "snapshot") {
           const incoming = msg.players || [];
-          for (const p of incoming) this.players.set(p.id, p);
-          for (const id of [...this.players.keys()]) {
-            if (!incoming.some((p) => p.id === id)) this.players.delete(id);
-          }
+          this.players = new Map(incoming.map((p) => [p.id, p]));
           if (msg.self) {
             this.self = msg.self;
             this.onSelf(this.self);
@@ -81,6 +75,12 @@ export class NetClient {
             this.round = msg.round;
             this.onRound(this.round);
           }
+          this.onPlayers(this.players);
+          return;
+        }
+
+        if (msg.type === "playerState" && msg.player) {
+          this.players.set(msg.player.id, { ...(this.players.get(msg.player.id) || {}), ...msg.player });
           this.onPlayers(this.players);
           return;
         }
@@ -109,10 +109,14 @@ export class NetClient {
   }
 
   sendState(state) { this.send("state", state); }
+  setReady(ready) { this.send("ready", { ready: !!ready }); }
+  startRound() { this.send("start"); }
+  returnLobby() { this.send("returnLobby"); }
   shoot(origin, direction) { this.send("shoot", { origin, direction }); }
   reload() { this.send("reload"); }
   interact(kind) { this.send("interact", { kind }); }
   ability() { this.send("ability"); }
+  voiceSignal(target, payload) { this.send("voiceSignal", { target, payload }); }
   disconnect() {
     try { this.ws?.close(1000, "leaving"); } catch {}
   }
