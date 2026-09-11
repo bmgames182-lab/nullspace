@@ -3,9 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#080909" />
-  <title>GHOSTCAM // Active Ragdoll Warzone</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <meta name="theme-color" content="#0c0e10" />
+  <title>ACTIVE BODY LAB</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0c0e10;color:#eef2f3}
+    #game{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
+    .hud{position:fixed;inset:0;pointer-events:none;z-index:2;text-shadow:0 1px 5px #000}
+    .brand{position:absolute;left:22px;top:20px;font-size:11px;font-weight:800;letter-spacing:.18em;color:rgba(238,242,243,.72)}
+    .brand b{display:block;margin-top:6px;font-size:18px;letter-spacing:.08em;color:#fff}
+    #status{position:absolute;left:50%;top:26px;transform:translateX(-50%);padding:8px 12px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(9,11,12,.56);backdrop-filter:blur(10px);font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.09em;color:rgba(255,255,255,.86);white-space:nowrap}
+    .controls{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);font:700 10px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:rgba(255,255,255,.62);white-space:nowrap}
+    .crosshair{position:absolute;left:50%;top:50%;width:8px;height:8px;transform:translate(-50%,-50%)}
+    .crosshair:before,.crosshair:after{content:"";position:absolute;background:rgba(255,255,255,.8);box-shadow:0 0 4px rgba(0,0,0,.9)}
+    .crosshair:before{left:3px;top:0;width:1px;height:8px}.crosshair:after{left:0;top:3px;width:8px;height:1px}
+    .hint{position:absolute;right:22px;top:20px;text-align:right;font:600 10px ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.55;color:rgba(255,255,255,.48)}
+    .vignette{position:absolute;inset:0;background:radial-gradient(circle at center,transparent 58%,rgba(0,0,0,.36) 100%)}
+    @media(max-width:700px){.controls{white-space:normal;width:90%;text-align:center}.hint{display:none}}
+  </style>
   <script type="importmap">
   {
     "imports": {
@@ -17,63 +33,15 @@
   </script>
 </head>
 <body>
-  <div id="boot" class="overlay">
-    <div class="boot-card">
-      <div class="eyebrow">BODYCAM ACTIVE-RAGDOLL WARZONE // BUILD 006</div>
-      <h1>GHOST<span>CAM</span></h1>
-      <p>Bodycam-style live-fire sandbox with active physical reactions. Soldiers fight, stumble, brace, fall, recover and remain fully interactive as ragdolls.</p>
-      <button id="deployBtn" class="primary">ENTER LIVE WARZONE</button>
-      <button id="bootSettingsBtn">SETTINGS</button>
-      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · HOLD LMB FIRE · G FRAG · B WAR/LAB · T SPAWN · K FLOP · E DRAG</div>
-      <div id="bootStatus">Physics engine waiting for deployment.</div>
-    </div>
-  </div>
-
-  <div id="pause" class="overlay" hidden>
-    <div class="pause-card">
-      <div class="eyebrow">BODYCAM FEED PAUSED</div>
-      <h2>GHOSTCAM</h2>
-      <button id="resumeBtn" class="primary">RESUME</button>
-      <button id="pauseSettingsBtn">SETTINGS</button>
-      <button id="restartBtn">RESET WARZONE</button>
-    </div>
-  </div>
-
-  <div id="settings" class="overlay" hidden>
-    <div class="settings-card">
-      <div class="settings-head"><div><div class="eyebrow">DEVICE CONFIG</div><h2>SETTINGS</h2></div><button id="closeSettingsBtn" class="close">×</button></div>
-      <div class="settings-grid">
-        <label>SENSITIVITY <span id="sensValue"></span><input id="sens" type="range" min="0.25" max="1.8" step="0.05"></label>
-        <label>FIELD OF VIEW <span id="fovValue"></span><input id="fov" type="range" min="70" max="110" step="1"></label>
-        <label>RENDER SCALE <span id="scaleValue"></span><input id="scale" type="range" min="0.55" max="1.25" step="0.05"></label>
-        <label>MASTER VOLUME <span id="volumeValue"></span><input id="volume" type="range" min="0" max="1" step="0.05"></label>
-        <label>BODYCAM SHAKE <span id="shakeValue"></span><input id="shake" type="range" min="0" max="1.4" step="0.1"></label>
-        <label>COMBATANT COUNT <span id="aiValue"></span><input id="aiCount" type="range" min="4" max="18" step="2"></label>
-      </div>
-      <div class="setting-checks"><label><input id="bloodSetting" type="checkbox"> BLOOD FX</label><label><input id="qualitySetting" type="checkbox"> HIGH QUALITY LIGHTING</label></div>
-    </div>
-  </div>
-
-  <div id="hud" hidden>
-    <div class="lens"></div><div class="scanlines"></div><div id="damage"></div>
-    <div class="rec"><b>● REC</b><span id="clock">00:00:00</span><small>BC-07 // LIVE CONTACT</small></div>
-    <div class="mission"><small>BODYCAM // ACTIVE CONTACT</small><strong id="objective">LIVE WARZONE</strong><span id="teams">BLUE 0 · RED 0</span></div>
-    <div id="crosshair"><i></i></div><div id="hitmarker">×</div>
-    <div id="feed"></div>
-    <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">CONTACT ACTIVE</small></div>
-    <div class="ammo"><b id="ammo">30</b><span>/</span><b id="reserve">120</b><small>5.56×45</small></div>
-    <div class="help">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · HOLD LMB FIRE · RMB AIM · B WAR/LAB · T SPAWN · K FLOP · J FLOP ALL · E DRAG · Q SHOVE · Y RECOVER · DEL REMOVE · H RESET · G FRAG</div>
-    <div id="deathCard" hidden><b>BODYCAM SIGNAL LOST</b><span>Press SPACE to redeploy</span></div>
-  </div>
-
   <canvas id="game"></canvas>
-  <script type="module" src="./soldier_skin.js"></script>
-  <script type="module" src="./combat_plus.js"></script>
-  <script type="module" src="./playground.js"></script>
-  <script type="module" src="./active_ragdoll_plus.js"></script>
-  <script type="module" src="./warzone.js"></script>
-  <script type="module" src="./game.js"></script>
-  <script type="module" src="./weapon_auto.js"></script>
-  <script type="module" src="./input_guard.js"></script>
+  <div class="hud">
+    <div class="vignette"></div>
+    <div class="brand">ORIGINAL ACTIVE-RAGDOLL PROTOTYPE<b>ACTIVE BODY LAB</b></div>
+    <div id="status">CLICK TO ENTER</div>
+    <div class="crosshair"></div>
+    <div class="controls">WASD MOVE · LMB SHOOT · RMB AIM · R RESET · ESC RELEASE MOUSE</div>
+    <div class="hint">ONE HUMAN<br>ONE WEAPON<br>PHYSICS FIRST</div>
+  </div>
+  <script type="module" src="./euphoria_lab.js"></script>
 </body>
 </html>
