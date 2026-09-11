@@ -32,72 +32,96 @@ function advance(f, seconds) {
   }
 }
 
-test("Artagdoll controller settles into a supported standing pose", () => {
+test("Artagdoll v4 has physical hands and settles into a supported standing pose", () => {
   const f = fixture();
   try {
+    assert.ok(f.h.body("handL"));
+    assert.ok(f.h.body("handR"));
+    assert.ok(f.h.parts.size >= 16);
     advance(f, 3);
     assert.equal(f.h.dead, false);
     assert.ok(f.h.body("pelvis").translation().y > 0.72);
-    assert.ok(f.h.body("chest").translation().y > 1.12);
-    assert.ok(["balance", "stumble"].includes(f.h.state));
+    assert.ok(f.h.body("chest").translation().y > 1.1);
+    assert.ok(["balance", "scramble"].includes(f.h.state));
   } finally {
     f.world.free();
   }
 });
 
-test("torso hit reacts before committing to a floor collapse", () => {
+test("front torso hit gives a stagger window instead of an instant crouch or collapse", () => {
   const f = fixture();
   try {
     advance(f, 2);
     f.h.hit("chest", { x: 0, y: 0, z: -1 }, 18);
-    advance(f, 0.14);
-    assert.ok(f.h.body("pelvis").translation().y > 0.58, "torso hit should stagger before collapsing");
+    advance(f, 0.16);
+    assert.ok(f.h.body("pelvis").translation().y > 0.7);
+    assert.ok(f.h.body("chest").translation().y > 1.02);
     assert.notEqual(f.h.state, "down");
+    assert.notEqual(f.h.state, "collapse");
     assert.ok(f.h.history.includes("react"));
   } finally {
     f.world.free();
   }
 });
 
-test("arm hit stays local enough that the legs keep supporting", () => {
+test("lateral torso hit gets a rescue step before any floor state", () => {
   const f = fixture();
   try {
     advance(f, 2);
-    f.h.hit("upperArmR", { x: 0, y: 0, z: -1 }, 18);
-    advance(f, 0.18);
-    assert.ok(f.h.injury.armR > 0 && f.h.injury.armR < 0.25);
-    assert.ok(f.h.body("pelvis").translation().y > 0.58);
+    f.h.hit("chest", { x: 1, y: 0, z: 0 }, 18);
+    advance(f, 0.42);
+    assert.ok(f.h.metrics.steps > 0, "lateral hit should trigger a catch step");
+    assert.ok(f.h.body("pelvis").translation().y > 0.54);
     assert.notEqual(f.h.state, "down");
   } finally {
     f.world.free();
   }
 });
 
-test("leg hit creates temporary inhibition instead of instant binary disable", () => {
+test("arm hit stays local and does not topple a healthy body seconds later", () => {
   const f = fixture();
   try {
     advance(f, 2);
-    f.h.hit("shinL", { x: 0, y: 0, z: -1 }, 18);
-    assert.ok(f.h.injury.L > 0.1 && f.h.injury.L < 0.3);
-    assert.ok(f.h.reaction.legStun.L > 0.6);
-    advance(f, 0.16);
-    assert.ok(f.h.body("pelvis").translation().y > 0.48);
-    assert.ok(f.h.reaction.legStun.L < 1);
+    f.h.hit("upperArmR", { x: 0, y: 0, z: -1 }, 18);
+    assert.ok(f.h.injury.armR > 0 && f.h.injury.armR < 0.2);
+    advance(f, 1.4);
+    assert.ok(f.h.body("pelvis").translation().y > 0.65);
+    assert.ok(f.h.body("chest").translation().y > 0.95);
+    assert.notEqual(f.h.state, "down");
+    assert.notEqual(f.h.state, "collapse");
   } finally {
     f.world.free();
   }
 });
 
-test("head hit produces a distinct temporary head inhibition", () => {
+test("leg hit unloads the struck leg into a forced swing instead of torso-first collapse", () => {
+  const f = fixture();
+  try {
+    advance(f, 2);
+    f.h.hit("shinL", { x: 0, y: 0, z: -1 }, 18);
+    assert.ok(f.h.injury.L > 0.1 && f.h.injury.L < 0.2);
+    assert.ok(f.h.reaction.legStun.L > 0.7);
+    advance(f, 0.22);
+    assert.ok(f.h.metrics.steps > 0);
+    assert.ok(f.h.body("pelvis").translation().y > 0.55);
+    assert.ok(f.h.body("chest").translation().y > 0.9);
+    assert.notEqual(f.h.state, "down");
+  } finally {
+    f.world.free();
+  }
+});
+
+test("head hit whips the head while the pelvis remains supported", () => {
   const f = fixture();
   try {
     advance(f, 2);
     f.h.hit("head", { x: 0, y: 0, z: -1 }, 14);
     assert.ok(f.h.reaction.headStun > 0.5);
-    advance(f, 0.12);
-    assert.ok(f.h.reaction.headStun > 0.35);
-    assert.ok(f.h.body("pelvis").translation().y > 0.5);
+    advance(f, 0.18);
+    assert.ok(f.h.body("pelvis").translation().y > 0.7);
+    assert.notEqual(f.h.state, "down");
     assert.ok(f.h.history.includes("react"));
+    assert.ok(Math.abs(f.h.body("head").angvel().x) > 0.02);
   } finally {
     f.world.free();
   }
