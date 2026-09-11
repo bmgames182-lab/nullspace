@@ -26,6 +26,7 @@ jobs:
           node --check client/camera_stability.js
           node --check client/active_ragdoll_plus.js
           node --check client/warzone.js
+          node --check client/weapon_auto.js
       - name: Verify warzone entrypoint
         run: |
           grep -q 'GHOSTCAM' client/index.html
@@ -35,6 +36,7 @@ jobs:
           grep -q './camera_stability.js' client/index.html
           grep -q './warzone.js' client/index.html
           grep -q './game.js' client/index.html
+          grep -q './weapon_auto.js' client/index.html
           test ! -e worker/src/index.ts
       - name: Guard movement collision regression
         run: |
@@ -51,3 +53,4 @@ jobs:
           grep -Fq 'Math.PI/2-.07' client/camera_stability.js
           grep -Fq '__ghostcamActivePlus' client/active_ragdoll_plus.js
           grep -Fq 'LIVE WAR // AI ENGAGED' client/warzone.js
+          grep -Fq 'setTimeout(repeat,104)' client/weapon_auto.js
