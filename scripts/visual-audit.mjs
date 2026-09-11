@@ -134,7 +134,13 @@ try {
   const report = { generatedAt: new Date().toISOString(), errors, scenarios: [] };
 
   for (const scenario of scenarios) {
-    await page.evaluate(() => lab.reset());
+    // Physics scenarios must start from the same render load. Persistent blood is
+    // tested separately in browser-test.mjs; carrying old FX between audit cases
+    // can make headless rendering slower than wall-clock and skew recovery timing.
+    await page.evaluate(() => {
+      lab.clearBlood();
+      lab.reset();
+    });
     await page.waitForFunction(() => lab.human.age > 2 && lab.human.state === "balance");
     await page.evaluate(() => {
       const chest = lab.human.body("chest").translation();
