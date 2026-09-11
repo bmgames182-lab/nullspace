@@ -1,25 +1,26 @@
 # GHOSTCAM
 
-Original browser-based bodycam combat and ragdoll simulation prototype.
+Original browser-based bodycam ragdoll playground and physics sandbox.
 
-The previous NULLSPACE / Backrooms project has been retired. The repository now targets a single-player CQB sandbox first so movement, AI, hit reactions and physics can be made solid before multiplayer is reintroduced.
+The previous NULLSPACE / Backrooms project has been retired. GHOSTCAM is now focused on bodycam presentation, weapon feel and physical ragdoll interaction rather than tactical or "smart" NPC combat.
 
 ## Current prototype
 
 - Three.js first-person bodycam presentation
-- Rapier 3D physics
-- articulated multi-body combat ragdolls
-- non-lethal knockdowns with recovery attempts
-- permanent physics deaths
-- two AI teams that seek, strafe, fire and use the map
+- Rapier 3D articulated multi-body ragdolls
+- passive test dummies instead of tactical AI
+- individual head / torso / limb hit reactions
+- non-lethal knockdowns and permanent physics deaths
+- shootable / shoveable / draggable ragdolls
 - player rifle with ADS, recoil, reload and tactical light
-- head / torso / limb damage multipliers
+- frag grenades with blast forces, flash, smoke and camera shake
 - tracers, impact marks, dust, shell ejection and optional blood particles
-- procedural layered gunshots, impacts, footsteps, distant fire and explosions
-- CQB compound with structures, containers, cover and physics clutter
-- graphics / AI / camera / audio settings
+- CC0 animated soldier model with procedural hitboxes
+- CC0 recorded combat/footstep audio plus synthesized fallback layers
+- CQB physics playground with structures, containers, cover and movable clutter
+- render, camera, blood and audio settings
 
-## Controls
+## Playground controls
 
 - `WASD` move
 - `Shift` sprint
@@ -29,8 +30,17 @@ The previous NULLSPACE / Backrooms project has been retired. The repository now 
 - `RMB` aim down sights
 - `R` reload
 - `F` tactical light
+- `G` throw frag
+- `T` spawn a dummy in front of the camera
+- `K` ragdoll the aimed dummy
+- `J` ragdoll every standing dummy
+- `E` hold to grab / drag the aimed ragdoll body part
+- `Q` shove the aimed dummy or ragdoll
+- `Y` stand an aimed recoverable dummy back up
+- `Delete` remove the aimed dummy
+- `H` reset the playground with a fresh dummy group
 - `Esc` game menu
-- `Space` redeploy after death
+- `Space` redeploy after player death
 
 ## Run locally
 
@@ -50,4 +60,4 @@ The existing Pages project can continue using `client` as its static output dire
 
 ## Direction
 
-The target is a convincing original bodycam war sandbox: physical reactions first, then smarter AI, richer sound/material assets, better weapon handling, destructible props, active-ragdoll balance/recovery and eventually optional multiplayer. It may take inspiration from the presentation and pacing of modern bodycam shooters, but should not copy proprietary BODYCAM code, maps, UI, models or audio.
+The target is a convincing original BODYCAM-style physics toybox: heavier body reactions, better active-ragdoll balance, richer get-up / stumble behaviour, more physical props, better weapon handling and audio, and eventually optional multiplayer sandbox play. It should capture the broad bodycam-ragdoll feel without copying proprietary BODYCAM code, maps, UI, models or audio.
