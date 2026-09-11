@@ -13,7 +13,8 @@ export class CombatRagdoll{
     this.scene=scene;this.physics=physics;this.RAPIER=RAPIER;this.parts=new Map();this.joints=[];
     this.recoverable=recoverable;this.dead=!recoverable;this.age=0;this.settleTime=0;this.recoveryBlend=0;
     this.lastImpactAge=-99;this.impactSeverity=0;this.impactDir={x:0,z:1};this.impactPart="torso";
-    this.stepSide=Math.random()<.5?-1:1;this.nextStepAt=.12+Math.random()*.12;this.supportQuality=0;this.groundTime=0;
+    this.stepSide=Math.random()<.5?-1:1;this.stepPhase="idle";this.stepStartedAt=0;this.stepEndsAt=0;this.stepCooldownUntil=.10+Math.random()*.12;this.stepTarget={x:0,z:0};
+    this.supportQuality=0;this.groundTime=0;
 
     const cloth=team==="blue"?0x33484e:0x514039,vest=team==="blue"?0x202c2e:0x302724;
     const mats={cloth:new THREE.MeshStandardMaterial({color:cloth,roughness:.92}),vest:new THREE.MeshStandardMaterial({color:vest,roughness:.86}),skin:new THREE.MeshStandardMaterial({color:0x9b725b,roughness:.96}),boots:new THREE.MeshStandardMaterial({color:0x151716,roughness:.94})};
@@ -74,7 +75,7 @@ export class CombatRagdoll{
     if(!this.recoverable||this.dead||this.age<1.45)return false;
     const torso=this.part("torso"),pelvis=this.part("pelvis");if(!torso||!pelvis)return false;
     const tp=torso.translation(),pp=pelvis.translation(),motion=this.getMotion(),upright=this.getUprightness();
-    return this.recoveryBlend>.78&&this.supportQuality>.45&&this.settleTime>.18&&motion<1.18&&tp.y>1.24&&pp.y>.82&&upright>.72
+    return this.recoveryBlend>.78&&this.supportQuality>.45&&this.settleTime>.18&&motion<1.18&&tp.y>1.24&&pp.y>.82&&upright>.72&&this.stepPhase==="idle"
   }
 
   impulse(direction,strength=4,part="torso"){
@@ -82,6 +83,7 @@ export class CombatRagdoll{
     const x=Number(direction?.x)||0,z=Number(direction?.z)||0,len=Math.hypot(x,z)||1;
     this.impactDir={x:x/len,z:z/len};this.impactPart=part;this.lastImpactAge=this.age;this.impactSeverity=clamp(strength/8+(part==="head"?.12:0),0,1);
     this.settleTime=0;this.recoveryBlend=Math.max(0,this.recoveryBlend-.30-.34*this.impactSeverity);
+    if(this.stepPhase!=="idle"){this.stepPhase="idle";this.stepCooldownUntil=this.age+.12}
     // Bullets should stagger a person, not launch them vertically. Keep the upward component tiny.
     const y=(Number(direction?.y)||0)*strength+.035*strength;
     target.body.applyImpulse({x:(Number(direction?.x)||0)*strength,y,z:(Number(direction?.z)||0)*strength},true);
@@ -92,6 +94,19 @@ export class CombatRagdoll{
     if(!body)return;const q=body.rotation();tmpQ.set(q.x,q.y,q.z,q.w);tmpUp.copy(UP).applyQuaternion(tmpQ);tmpAxis.copy(tmpUp).cross(UP);const av=body.angvel();
     const ix=clamp(tmpAxis.x*gain-av.x*damping,-gain,gain)*frame,iy=clamp(-av.y*damping*.42,-gain*.25,gain*.25)*frame,iz=clamp(tmpAxis.z*gain-av.z*damping,-gain,gain)*frame;
     body.applyTorqueImpulse({x:ix,y:iy,z:iz},true)
+  }
+
+  beginCaptureStep(pelvis,ftL,ftR,errX,errZ,pv,tmpSide){
+    if(!ftL||!ftR)return;
+    const pp=pelvis.translation(),lp=ftL.translation(),rp=ftR.translation();
+    const predict=.16+Math.min(.18,Math.hypot(pv.x,pv.z)*.055);
+    const baseX=pp.x+pv.x*predict+errX*.78+this.impactDir.x*this.impactSeverity*.08;
+    const baseZ=pp.z+pv.z*predict+errZ*.78+this.impactDir.z*this.impactSeverity*.08;
+    const dl=Math.hypot(baseX-lp.x,baseZ-lp.z),dr=Math.hypot(baseX-rp.x,baseZ-rp.z);
+    this.stepSide=dl>dr?-1:1;
+    const lateral=this.stepSide*.16;
+    this.stepTarget.x=baseX+tmpSide.x*lateral;this.stepTarget.z=baseZ+tmpSide.z*lateral;
+    this.stepStartedAt=this.age;this.stepEndsAt=this.age+clamp(.42-Math.hypot(pv.x,pv.z)*.035,.28,.42);this.stepPhase="swing"
   }
 
   brace(dt){
@@ -128,22 +143,39 @@ export class CombatRagdoll{
       pelvis.applyImpulse({x:ix,y:0,z:iz},true)
     }
 
-    // Determine body-forward/side directions from the pelvis; used only to place recovery steps.
+    // Build body-forward/side directions for capture stepping.
     const pq=pelvis.rotation();tmpQ.set(pq.x,pq.y,pq.z,pq.w);tmpForward.copy(FORWARD).applyQuaternion(tmpQ);tmpForward.y=0;if(tmpForward.lengthSq()<.001)tmpForward.set(this.impactDir.x,0,this.impactDir.z);tmpForward.normalize();tmpSide.set(tmpForward.z,0,-tmpForward.x);
     const needsStep=(err>.11||speed>.48||upright<.80)&&upright>.12&&pp.y>.38&&this.age>.10;
-    if(needsStep&&this.age>=this.nextStepAt){this.stepSide*=-1;this.nextStepAt=this.age+(.20+Math.random()*.12)}
-    if(needsStep){
-      const left=this.stepSide<0,foot=left?ftL:ftR,shin=left?shL:shR,thigh=left?thL:thR;if(foot&&shin&&thigh){
-        const fp=foot.translation(),fv=foot.linvel(),side=this.stepSide;
-        const leadX=clamp(pv.x*.20+errX*.72+this.impactDir.x*this.impactSeverity*.08,-.42,.42),leadZ=clamp(pv.z*.20+errZ*.72+this.impactDir.z*this.impactSeverity*.08,-.42,.42);
-        const tx=pp.x+leadX+tmpSide.x*side*.17,tz=pp.z+leadZ+tmpSide.z*side*.17;
-        const sx=clamp((tx-fp.x)*.020-fv.x*.0035,-.020,.020)*active*frame,sz=clamp((tz-fp.z)*.020-fv.z*.0035,-.020,.020)*active*frame;
-        const lift=fp.y<.13?.010:.004;foot.applyImpulse({x:sx,y:lift*active*frame,z:sz},true);shin.applyImpulse({x:sx*.55,y:lift*.55*active*frame,z:sz*.55},true);thigh.applyImpulse({x:sx*.35,y:lift*.35*active*frame,z:sz*.35},true)
-      }
+
+    // A real catch step is a committed action: choose one swing foot, move it to a predicted capture
+    // point, plant it, then reassess. This replaces the old left/right flip every few frames.
+    if(this.stepPhase==="idle"&&needsStep&&this.age>=this.stepCooldownUntil)this.beginCaptureStep(pelvis,ftL,ftR,errX,errZ,pv,tmpSide);
+    if(this.stepPhase!=="idle"){
+      const left=this.stepSide<0,foot=left?ftL:ftR,shin=left?shL:shR,thigh=left?thL:thR;
+      const supportFoot=left?ftR:ftL;
+      if(foot&&shin&&thigh){
+        const fp=foot.translation(),fv=foot.linvel();
+        if(this.stepPhase==="swing"){
+          const duration=Math.max(.001,this.stepEndsAt-this.stepStartedAt),phase=clamp((this.age-this.stepStartedAt)/duration,0,1),ease=phase*phase*(3-2*phase);
+          const dx=this.stepTarget.x-fp.x,dz=this.stepTarget.z-fp.z,dist=Math.hypot(dx,dz);
+          const horizontalGain=.018+.014*(1-ease),sx=clamp(dx*horizontalGain-fv.x*.0038,-.026,.026)*active*frame,sz=clamp(dz*horizontalGain-fv.z*.0038,-.026,.026)*active*frame;
+          const liftWave=Math.sin(Math.PI*phase),desiredLift=.045+.085*liftWave;
+          const sy=clamp((desiredLift-fp.y)*.038-fv.y*.003,-.010,.020)*active*frame;
+          foot.applyImpulse({x:sx,y:sy,z:sz},true);shin.applyImpulse({x:sx*.50,y:Math.max(0,sy)*.52,z:sz*.50},true);thigh.applyImpulse({x:sx*.28,y:Math.max(0,sy)*.28,z:sz*.28},true);
+          if((phase>.58&&dist<.11&&fp.y<.14)||phase>=1){this.stepPhase="plant";this.stepEndsAt=this.age+.13}
+        }else if(this.stepPhase==="plant"){
+          const v=foot.linvel();foot.applyImpulse({x:clamp(-v.x*.010,-.018,.018)*frame,y:fp.y>.11?-.006*frame:-.002*frame,z:clamp(-v.z*.010,-.018,.018)*frame},true);
+          if(this.age>=this.stepEndsAt){this.stepPhase="idle";this.stepCooldownUntil=this.age+.18+Math.random()*.10}
+        }
+      }else{this.stepPhase="idle";this.stepCooldownUntil=this.age+.20}
+
+      // The non-swing foot is the actual support leg during the catch. Keep it planted instead of
+      // allowing both feet to skate while the controller tries to move the body.
+      if(supportFoot){const sp=supportFoot.translation(),sv=supportFoot.linvel();if(sp.y<.16)supportFoot.applyImpulse({x:clamp(-sv.x*.010,-.017,.017)*frame,y:-.0025*active*frame,z:clamp(-sv.z*.010,-.017,.017)*frame},true)}
     }
 
-    // Plant whichever foot is on the floor so it provides believable traction instead of skating.
-    for(const foot of [ftL,ftR]){if(!foot)continue;const p=foot.translation(),v=foot.linvel();if(p.y<.14){foot.applyImpulse({x:clamp(-v.x*.006,-.012,.012)*frame,y:-.002*active*frame,z:clamp(-v.z*.006,-.012,.012)*frame},true)}}
+    // When no capture step is active, both grounded feet provide moderate traction.
+    if(this.stepPhase==="idle")for(const foot of [ftL,ftR]){if(!foot)continue;const p=foot.translation(),v=foot.linvel();if(p.y<.14)foot.applyImpulse({x:clamp(-v.x*.006,-.012,.012)*frame,y:-.002*active*frame,z:clamp(-v.z*.006,-.012,.012)*frame},true)}
 
     // Protective reach: arms go toward the direction of travel before impact, then push back off the
     // floor if the hands get low. This gives catches/braces instead of permanently dead arms.
@@ -160,7 +192,7 @@ export class CombatRagdoll{
 
   update(dt){
     this.age+=dt;this.brace(dt);const motion=this.getMotion();
-    this.settleTime=motion<1.05&&this.supportQuality>.28?this.settleTime+dt:Math.max(0,this.settleTime-dt*2.0);
+    this.settleTime=motion<1.05&&this.supportQuality>.28&&this.stepPhase==="idle"?this.settleTime+dt:Math.max(0,this.settleTime-dt*2.0);
     this.impactSeverity=THREE.MathUtils.lerp(this.impactSeverity,0,1-Math.exp(-dt*.72));this.sync()
   }
   sync(){for(const {body,mesh} of this.parts.values()){const p=body.translation(),q=body.rotation();mesh.position.set(p.x,p.y,p.z);mesh.quaternion.set(q.x,q.y,q.z,q.w)}}
