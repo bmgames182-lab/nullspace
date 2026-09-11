@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import RAPIER from "@dimforge/rapier3d-compat";
 
-import { BiologicalArtagdollHuman } from "./biological_human.js";
+import { BiologicalArtagdollHumanV6 } from "./biological_human_v6.js";
 import { BloodSystem } from "./blood_fx.js";
 await RAPIER.init();
 
@@ -101,7 +101,7 @@ const blood = new BloodSystem(scene, {
 const v0 = new THREE.Vector3(),
   v1 = new THREE.Vector3();
 
-let human = new BiologicalArtagdollHuman(world, scene, 0, 0);
+let human = new BiologicalArtagdollHumanV6(world, scene, 0, 0);
 const controls = new PointerLockControls(camera, document.body);
 const keys = new Set();
 let aiming = false,
@@ -216,7 +216,7 @@ function fire() {
 function reset() {
   blood.removeHuman(human);
   human.destroy();
-  human = new BiologicalArtagdollHuman(world, scene, 0, 0);
+  human = new BiologicalArtagdollHumanV6(world, scene, 0, 0);
   accumulator = 0;
 }
 
