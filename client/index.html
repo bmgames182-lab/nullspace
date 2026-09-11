@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#080909" />
-  <title>GHOSTCAM // Live Fire</title>
+  <title>GHOSTCAM // Ragdoll Playground</title>
   <link rel="stylesheet" href="./styles.css" />
   <script type="importmap">
   {
@@ -19,12 +19,12 @@
 <body>
   <div id="boot" class="overlay">
     <div class="boot-card">
-      <div class="eyebrow">TACTICAL BODY CAMERA SIMULATION // BUILD 003</div>
+      <div class="eyebrow">BODYCAM PHYSICS SANDBOX // BUILD 004</div>
       <h1>GHOST<span>CAM</span></h1>
-      <p>Close-quarters AI firefights with physics-driven hit reactions, suppression, grenades and articulated ragdolls. Original browser prototype inspired by modern bodycam shooters.</p>
-      <button id="deployBtn" class="primary">DEPLOY TO LIVE FIRE</button>
+      <p>Bodycam-style ragdoll playground. Spawn passive test dummies, shoot individual limbs, knock bodies down, drag them around and blast the scene with physics.</p>
+      <button id="deployBtn" class="primary">ENTER RAGDOLL PLAYGROUND</button>
       <button id="bootSettingsBtn">SETTINGS</button>
-      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · LMB FIRE · G FRAG · R RELOAD · F LIGHT · ESC MENU</div>
+      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · LMB FIRE · G FRAG · T SPAWN · K FLOP · E DRAG · H RESET</div>
       <div id="bootStatus">Physics engine waiting for deployment.</div>
     </div>
   </div>
@@ -35,7 +35,7 @@
       <h2>GHOSTCAM</h2>
       <button id="resumeBtn" class="primary">RESUME</button>
       <button id="pauseSettingsBtn">SETTINGS</button>
-      <button id="restartBtn">RESTART SKIRMISH</button>
+      <button id="restartBtn">RESET PLAYGROUND</button>
     </div>
   </div>
 
@@ -48,7 +48,7 @@
         <label>RENDER SCALE <span id="scaleValue"></span><input id="scale" type="range" min="0.55" max="1.25" step="0.05"></label>
         <label>MASTER VOLUME <span id="volumeValue"></span><input id="volume" type="range" min="0" max="1" step="0.05"></label>
         <label>BODYCAM SHAKE <span id="shakeValue"></span><input id="shake" type="range" min="0" max="1.4" step="0.1"></label>
-        <label>AI COUNT <span id="aiValue"></span><input id="aiCount" type="range" min="4" max="18" step="2"></label>
+        <label>DUMMY COUNT <span id="aiValue"></span><input id="aiCount" type="range" min="4" max="18" step="2"></label>
       </div>
       <div class="setting-checks"><label><input id="bloodSetting" type="checkbox"> BLOOD FX</label><label><input id="qualitySetting" type="checkbox"> HIGH QUALITY LIGHTING</label></div>
     </div>
@@ -56,19 +56,20 @@
 
   <div id="hud" hidden>
     <div class="lens"></div><div class="scanlines"></div><div id="damage"></div>
-    <div class="rec"><b>● REC</b><span id="clock">00:00:00</span><small>BC-07 // UNIT ALPHA</small></div>
-    <div class="mission"><small>LIVE FIRE // COMPOUND 17</small><strong id="objective">ELIMINATE HOSTILE FORCE</strong><span id="teams">BLUE 0 · RED 0</span></div>
+    <div class="rec"><b>● REC</b><span id="clock">00:00:00</span><small>BC-07 // PHYSICS LAB</small></div>
+    <div class="mission"><small>BODYCAM PHYSICS LAB // FREE PLAY</small><strong id="objective">RAGDOLL PLAYGROUND</strong><span id="teams">T SPAWN · K FLOP · E DRAG</span></div>
     <div id="crosshair"><i></i></div><div id="hitmarker">×</div>
     <div id="feed"></div>
-    <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">COMBAT EFFECTIVE</small></div>
+    <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">SANDBOX ACTIVE</small></div>
     <div class="ammo"><b id="ammo">30</b><span>/</span><b id="reserve">120</b><small>5.56×45</small></div>
-    <div class="help">F LIGHT · G FRAG · R RELOAD · RMB AIM · ESC MENU</div>
+    <div class="help">T SPAWN · K FLOP · J FLOP ALL · E DRAG · Q SHOVE · Y STAND · DEL REMOVE · H RESET · G FRAG</div>
     <div id="deathCard" hidden><b>BODYCAM SIGNAL LOST</b><span>Press SPACE to redeploy</span></div>
   </div>
 
   <canvas id="game"></canvas>
   <script type="module" src="./soldier_skin.js"></script>
   <script type="module" src="./combat_plus.js"></script>
+  <script type="module" src="./playground.js"></script>
   <script type="module" src="./game.js"></script>
 </body>
 </html>
