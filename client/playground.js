@@ -18,15 +18,13 @@ THREE.Scene.prototype.add=function(...objects){
 };
 
 function registerDummy(s){
-  if(!s||s.__playground)return;s.__playground=true;dummies.add(s);s.manualRagdollHold=false;s.autoRecoverAt=0;
+  if(!s||s.__playground)return;s.__playground=true;s.__playgroundStandalone=false;s.__playgroundDisposed=false;dummies.add(s);s.manualRagdollHold=false;s.autoRecoverAt=0;
   const baseFall=s.fall?.bind(s),baseDispose=s.dispose?.bind(s),baseRecover=s.recover?.bind(s),baseTakeHit=s.takeHit?.bind(s);
 
   if(baseFall)s.fall=function(dir,recoverable=true){
     const out=baseFall(dir,recoverable);
     if(this.ragdoll){
       this.ragdoll.__owner=this;
-      // Damage-caused recoverable falls are allowed to settle and stand again. Sandbox-triggered
-      // flops set manualRagdollHold immediately after this call and therefore stay down.
       if(recoverable&&!this.manualRagdollHold){
         this.autoRecoverAt=performance.now()+1450+Math.random()*850;
         this.recoverAt=this.autoRecoverAt;
@@ -37,8 +35,6 @@ function registerDummy(s){
 
   if(baseRecover)s.recover=function(){
     if(!this.alive||!this.ragdoll)return;
-    // Never snap an unstable body upright. Keep letting the weak active controller brace and
-    // organise the body until it is actually balanced enough to hand control back to animation.
     if(this.ragdoll.canRecover&&!this.ragdoll.canRecover()){
       this.autoRecoverAt=performance.now()+180;
       this.recoverAt=this.autoRecoverAt;
@@ -49,20 +45,25 @@ function registerDummy(s){
   };
 
   if(baseTakeHit)s.takeHit=function(damage,dir,part="torso",source="unknown"){
-    // A fresh live-fire hit should release a manually pinned test body only when the soldier was
-    // standing. Existing manually-flopped bodies remain sandbox objects and still take impulses.
     const wasStanding=!this.ragdoll;
     const out=baseTakeHit(damage,dir,part,source);
     if(wasStanding&&this.ragdoll?.recoverable&&this.alive){this.manualRagdollHold=false;this.autoRecoverAt=performance.now()+1350+Math.random()*900;this.recoverAt=this.autoRecoverAt}
     return out
   };
 
-  if(baseDispose)s.dispose=function(){dummies.delete(this);if(grab?.owner===this)grab=null;return baseDispose()};
+  if(baseDispose)s.dispose=function(){
+    if(this.__playgroundDisposed)return;
+    dummies.delete(this);if(grab?.owner===this)grab=null;
+    const out=baseDispose();
+    // Core game arrays are private, so a disposed original Soldier can still be iterated by the
+    // main loop. Make that harmless: no stale destroyed ragdoll body and no ghost actor updates.
+    this.ragdoll=null;this.alive=false;this.state="removed";this.__playgroundDisposed=true;
+    return out
+  };
 
-  // No target selection, flanking, cover seeking or return fire in playground mode. Standing
-  // dummies breathe and sway; recoverable ragdolls are still fully simulated and can stand again.
   s.closestEnemy=()=>null;
   s.update=function(dt,now){
+    if(this.__playgroundDisposed)return;
     if(this.ragdoll){
       this.ragdoll.update(dt);const p=this.ragdoll.getPosition();this.pos.set(p.x,0,p.z);
       if(this.alive&&!this.manualRagdollHold&&this.ragdoll.recoverable&&now>=this.autoRecoverAt&&this.ragdoll.age>1.25){
@@ -84,6 +85,7 @@ function aimedHit(includeStanding=true,includeRagdolls=true){
   if(!cameraRef)return null;cameraRef.getWorldPosition(origin);cameraRef.getWorldDirection(direction);raycaster.set(origin,direction);raycaster.far=30;
   const meshes=[];
   for(const s of dummies){
+    if(s.__playgroundDisposed)continue;
     if(includeStanding&&s.group?.visible)s.group.traverse(o=>{if(o.isMesh)meshes.push(o)});
     if(includeRagdolls&&s.ragdoll)for(const {mesh} of s.ragdoll.parts.values())meshes.push(mesh)
   }
@@ -92,16 +94,18 @@ function aimedHit(includeStanding=true,includeRagdolls=true){
   return{hit,owner,rag,part:hit.object.userData.bodyPart||"torso"}
 }
 
+function makeStandalone(team,index,x,z){const s=new SoldierCtor(team,index,[x,z]);s.__playgroundStandalone=true;return s}
+
 function spawnDummy(){
   const now=performance.now();if(!SoldierCtor||!cameraRef||now-lastSpawn<180)return;lastSpawn=now;
   cameraRef.getWorldPosition(origin);cameraRef.getWorldDirection(direction);direction.y=0;if(direction.lengthSq()<.001)direction.set(0,0,-1);direction.normalize();
   const side=new THREE.Vector3(direction.z,0,-direction.x),slot=(nextIndex%5)-2;
   target.copy(origin).addScaledVector(direction,3.8+Math.random()*1.5).addScaledVector(side,slot*.48);target.y=0;
-  const team=nextIndex%2?"red":"blue";new SoldierCtor(team,nextIndex++,[target.x,target.z]);toast("DUMMY SPAWNED")
+  const team=nextIndex%2?"red":"blue";makeStandalone(team,nextIndex++,target.x,target.z);toast("DUMMY SPAWNED")
 }
 
 function flopDummy(s,push=1){
-  if(!s?.alive||s.ragdoll)return;cameraRef?.getWorldDirection(direction);direction.y=.02;direction.normalize();
+  if(!s?.alive||s.ragdoll)return;cameraRef?.getWorldDirection(direction);direction.y=.02;if(direction.lengthSq()<.001)direction.set(0,.02,-1);direction.normalize();
   s.manualRagdollHold=true;s.fall?.(direction,true);
   if(s.ragdoll){s.ragdoll.__owner=s;s.recoverAt=Infinity;s.autoRecoverAt=Infinity;s.ragdoll.impulse(direction,2.4*push,"torso")}
 }
@@ -110,8 +114,6 @@ function flopAll(){for(const s of dummies)flopDummy(s,.65);toast("ALL DUMMIES RA
 
 function standAimed(){
   const x=aimedHit(false,true),s=x?.owner;if(!s?.ragdoll||!s.alive)return;
-  // Y now releases the hold and asks the active controller to recover instead of teleporting the
-  // body upright. A small pelvis/torso lift helps badly folded poses start the recovery sequence.
   s.manualRagdollHold=false;s.ragdoll.recoverable=true;s.ragdoll.dead=false;s.ragdoll.settleTime=Math.max(s.ragdoll.settleTime||0,.2);s.ragdoll.age=Math.max(s.ragdoll.age||0,1.25);
   const pelvis=s.ragdoll.parts.get("pelvis")?.body,torso=s.ragdoll.parts.get("torso")?.body;
   pelvis?.applyImpulse({x:0,y:.055,z:0},true);torso?.applyImpulse({x:0,y:.045,z:0},true);
@@ -121,10 +123,10 @@ function deleteAimed(){const x=aimedHit(true,true),s=x?.owner;if(!s)return;s.dis
 
 function resetPlayground(){
   const old=[...dummies];for(const s of old)s.dispose?.();grab=null;
-  if(!SoldierCtor||!cameraRef)return;cameraRef.getWorldPosition(origin);cameraRef.getWorldDirection(direction);direction.y=0;direction.normalize();const side=new THREE.Vector3(direction.z,0,-direction.x);
+  if(!SoldierCtor||!cameraRef)return;cameraRef.getWorldPosition(origin);cameraRef.getWorldDirection(direction);direction.y=0;if(direction.lengthSq()<.001)direction.set(0,0,-1);direction.normalize();const side=new THREE.Vector3(direction.z,0,-direction.x);
   for(let i=0;i<6;i++){
     const row=Math.floor(i/3),col=i%3-1;target.copy(origin).addScaledVector(direction,5+row*2.1).addScaledVector(side,col*1.35);target.y=0;
-    new SoldierCtor(i%2?"red":"blue",nextIndex++,[target.x,target.z])
+    makeStandalone(i%2?"red":"blue",nextIndex++,target.x,target.z)
   }
   toast("PLAYGROUND RESET")
 }
@@ -133,12 +135,11 @@ function beginGrab(){
   const x=aimedHit(false,true);if(!x?.rag)return;const part=x.rag.parts.get(x.part)||x.rag.parts.get("torso");if(!part)return;grab={body:part.body,owner:x.owner,distance:THREE.MathUtils.clamp(x.hit.distance,1.2,5.5)};toast("RAGDOLL GRAB")
 }
 function updateGrab(dt){
-  if(!grab||!cameraRef)return;const body=grab.body;if(!body){grab=null;return}
+  if(!grab||!cameraRef)return;const body=grab.body;if(!body||grab.owner?.__playgroundDisposed){grab=null;return}
   cameraRef.getWorldPosition(origin);cameraRef.getWorldDirection(direction);target.copy(origin).addScaledVector(direction,grab.distance);
   const p=body.translation(),v=body.linvel();delta.set(target.x-p.x,target.y-p.y,target.z-p.z);
   const dist=delta.length(),spring=dist>2.2?.13:.18,damping=dist>2.2?.018:.012,k=Math.min(1,dt*60),impulse=delta.multiplyScalar(spring*k);
   impulse.x-=v.x*damping*k;impulse.y-=v.y*damping*k;impulse.z-=v.z*damping*k;
-  // Clamp grab impulse so rapidly turning the camera cannot inject absurd energy into the joint chain.
   const maxImpulse=.42;if(impulse.length()>maxImpulse)impulse.setLength(maxImpulse);
   body.applyImpulse({x:impulse.x,y:impulse.y,z:impulse.z},true)
 }
@@ -166,7 +167,12 @@ window.addEventListener("keydown",e=>{
 },{capture:true});
 window.addEventListener("keyup",e=>{if(e.code==="KeyE")grab=null},{capture:true});
 
-let last=performance.now(),uiAt=0;function frame(now){const dt=Math.min(.04,(now-last)/1000||.016);last=now;updateGrab(dt);
+let last=performance.now(),uiAt=0;function frame(now){
+  const dt=Math.min(.04,(now-last)/1000||.016);last=now;updateGrab(dt);
+  // T-spawned/reset dummies are constructed outside game.js's private soldiers[] array, so this
+  // module owns their animation/ragdoll update. Original game-created dummies are still ticked once
+  // by the core loop and are deliberately excluded here to avoid double stepping recovery logic.
+  for(const s of dummies)if(s.__playgroundStandalone&&!s.__playgroundDisposed)s.update?.(dt,now);
   if(now-uiAt>150){uiAt=now;const objective=document.getElementById("objective"),teams=document.getElementById("teams"),mission=document.querySelector(".mission small");let standing=0,ragdolled=0,recovering=0;for(const s of dummies){if(s.ragdoll){ragdolled++;if(!s.manualRagdollHold&&s.ragdoll.recoverable)recovering++}else if(s.alive)standing++}if(objective)objective.textContent="RAGDOLL PLAYGROUND";if(teams)teams.textContent=`STANDING ${standing} · RAGDOLLS ${ragdolled} · RECOVERING ${recovering}`;if(mission)mission.textContent="BODYCAM PHYSICS LAB // FREE PLAY"}
   requestAnimationFrame(frame)
 }requestAnimationFrame(frame);
