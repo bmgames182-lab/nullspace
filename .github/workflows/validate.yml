@@ -22,6 +22,7 @@ jobs:
           node --check client/soldier_skin.js
           node --check client/combat_plus.js
           node --check client/playground.js
+          node --check client/input_guard.js
       - name: Verify playground entrypoint
         run: |
           grep -q 'GHOSTCAM' client/index.html
@@ -29,3 +30,12 @@ jobs:
           grep -q './playground.js' client/index.html
           grep -q './game.js' client/index.html
           test ! -e worker/src/index.ts
+      - name: Guard movement collision regression
+        run: |
+          # The floor must remain a Rapier collider but must never enter the X/Z obstacle list,
+          # otherwise every player/AI move and every LOS query is blocked by the whole map.
+          grep -Fq 'fixedBox(0,-.15,0,70,.3,70,groundMat,true,false)' client/world.js
+          grep -Fq 'if(navCollide)obstacles.push' client/world.js
+          # T-spawned/reset playground dummies live outside game.js soldiers[] and need their own tick.
+          grep -Fq 's.__playgroundStandalone=true' client/playground.js
+          grep -Fq 'if(s.__playgroundStandalone&&!s.__playgroundDisposed)s.update?.(dt,now)' client/playground.js
