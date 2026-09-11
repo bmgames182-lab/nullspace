@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import RAPIER from "@dimforge/rapier3d-compat";
 
-import { ActiveHuman } from "./active_human.js";
+import { ArtagdollHuman } from "./artagdoll_human.js";
 await RAPIER.init();
 
 const canvas = document.getElementById("game");
@@ -91,7 +91,7 @@ addCover(3, 0.55, -3, 1.6, 1.1, 1.2);
 const v0 = new THREE.Vector3(),
   v1 = new THREE.Vector3();
 
-let human = new ActiveHuman(world, scene, 0, 0);
+let human = new ArtagdollHuman(world, scene, 0, 0);
 const controls = new PointerLockControls(camera, document.body);
 const keys = new Set();
 let aiming = false,
@@ -197,7 +197,7 @@ function fire() {
 
 function reset() {
   human.destroy();
-  human = new ActiveHuman(world, scene, 0, 0);
+  human = new ArtagdollHuman(world, scene, 0, 0);
   accumulator = 0;
 }
 
@@ -338,11 +338,20 @@ if (new URLSearchParams(location.search).has("test"))
     },
     snapshot() {
       return {
+        controllerStyle: human.controllerStyle,
         state: human.state,
         history: human.history,
         step: { ...human.step },
         metrics: { ...human.metrics },
         injury: { ...human.injury },
+        reaction: human.reaction
+          ? {
+              age: human.reaction.age,
+              strength: human.reaction.strength,
+              part: human.reaction.part,
+              headStun: human.reaction.headStun,
+            }
+          : null,
         dead: human.dead,
         parts: Object.fromEntries(
           [...human.parts].map(([name, { rb }]) => [
