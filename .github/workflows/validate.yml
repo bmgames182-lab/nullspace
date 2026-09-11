@@ -29,6 +29,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Exercise FPS and targeted body hits in browser
         run: npm run test:browser
+      - name: Capture deterministic visual physics audit
+        run: npm run audit:visual
       - uses: actions/upload-artifact@v4
         if: always()
         with:
