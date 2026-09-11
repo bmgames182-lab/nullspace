@@ -27,19 +27,23 @@ const scenarios = [
     strength: 8,
     dir: { x: 0, y: 0, z: -1 },
     repeat: 3,
-    repeatGap: 140,
+    repeatGap: 0.14,
   },
 ];
 
+// These are elapsed *simulation* times after the final shot, not wall-clock waits.
+// Software rendering can slow dramatically when lots of FX are visible, while the
+// fixed-step loop intentionally clamps catch-up. Sampling human.age keeps the audit
+// about physics behavior instead of runner/rendering speed.
 const frames = [
-  { id: "000", wait: 0 },
-  { id: "080", wait: 80 },
-  { id: "180", wait: 100 },
-  { id: "360", wait: 180 },
-  { id: "700", wait: 340 },
-  { id: "1200", wait: 500 },
-  { id: "2200", wait: 1000 },
-  { id: "3500", wait: 1300 },
+  { id: "000", elapsed: 0 },
+  { id: "080", elapsed: 0.08 },
+  { id: "180", elapsed: 0.18 },
+  { id: "360", elapsed: 0.36 },
+  { id: "700", elapsed: 0.7 },
+  { id: "1200", elapsed: 1.2 },
+  { id: "2200", elapsed: 2.2 },
+  { id: "3500", elapsed: 3.5 },
 ];
 
 function sampleAt(entry, id) {
@@ -84,9 +88,23 @@ function assertBehavior(entry) {
   }
 
   if (id === "repeated-light-chest") {
-    assert.ok(final.parts.pelvis.position.y > 0.72, "three light torso hits should be recoverable");
-    assert.ok(!["down", "collapse"].includes(final.state), "light hits should not leave a floor ragdoll");
+    assert.ok(
+      final.parts.pelvis.position.y > 0.72,
+      `three light torso hits should be recoverable (pelvis=${final.parts.pelvis.position.y.toFixed(3)}, state=${final.state}, history=${final.history.join(",")})`,
+    );
+    assert.ok(
+      !["down", "collapse"].includes(final.state),
+      `light hits should not leave a floor ragdoll (state=${final.state}, pelvis=${final.parts.pelvis.position.y.toFixed(3)})`,
+    );
   }
+}
+
+async function waitForSimAge(page, targetAge) {
+  await page.waitForFunction(
+    (target) => window.lab?.human?.age >= target,
+    targetAge,
+    { timeout: 20000 },
+  );
 }
 
 let browser;
@@ -132,11 +150,12 @@ try {
   });
 
   const report = { generatedAt: new Date().toISOString(), errors, scenarios: [] };
+  const reportPath = new URL("audit.json", root);
 
   for (const scenario of scenarios) {
     // Physics scenarios must start from the same render load. Persistent blood is
     // tested separately in browser-test.mjs; carrying old FX between audit cases
-    // can make headless rendering slower than wall-clock and skew recovery timing.
+    // would make one scenario more expensive to render than another.
     await page.evaluate(() => {
       lab.clearBlood();
       lab.reset();
@@ -158,33 +177,42 @@ try {
     await shot();
     if (scenario.repeat) {
       for (let i = 1; i < scenario.repeat; i++) {
-        await page.waitForTimeout(scenario.repeatGap);
+        const previousShotAge = await page.evaluate(() => lab.human.age);
+        await waitForSimAge(page, previousShotAge + scenario.repeatGap);
         await shot();
       }
     }
 
+    // Start the audit clock after the final repeated hit, matching the old test's
+    // semantics while making every timestamp refer to actual simulated time.
+    const startAge = await page.evaluate(() => lab.human.age);
     const samples = [];
     for (const frame of frames) {
-      if (frame.wait) await page.waitForTimeout(frame.wait);
+      if (frame.elapsed > 0) await waitForSimAge(page, startAge + frame.elapsed);
       const snapshot = await page.evaluate(() => lab.snapshot());
-      samples.push({ t: frame.id, snapshot });
+      samples.push({
+        t: frame.id,
+        simulatedElapsed: snapshot.parts ? snapshot.reaction?.age ?? null : null,
+        humanAge: await page.evaluate(() => lab.human.age),
+        snapshot,
+      });
       await page.screenshot({
         path: new URL(`${scenario.id}-${frame.id}.png`, root).pathname.replace(/^\/(\w:)/, "$1"),
       });
     }
 
-    const entry = { scenario, before, samples };
-    assertBehavior(entry);
+    const entry = { scenario, before, startAge, samples };
     report.scenarios.push(entry);
+    // Persist diagnostics before asserting so a red CI run still uploads the exact
+    // state that failed instead of leaving us with screenshots only.
+    await writeFile(reportPath, JSON.stringify(report, null, 2));
+    assertBehavior(entry);
   }
 
   assert.deepEqual(errors, []);
-  await writeFile(
-    new URL("audit.json", root),
-    JSON.stringify(report, null, 2),
-  );
+  await writeFile(reportPath, JSON.stringify(report, null, 2));
   console.log(
-    `Visual audit passed: ${scenarios.length} deterministic close-framed impact scenarios captured and behavior-checked.`,
+    `Visual audit passed: ${scenarios.length} deterministic close-framed impact scenarios captured at simulation-time checkpoints and behavior-checked.`,
   );
 } finally {
   await browser?.close();
