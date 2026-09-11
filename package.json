@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node scripts/serve.mjs",
-    "test": "node --test tests/physics.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "check": "node --check client/euphoria_lab.js && node --check client/active_human.js && node --check client/artagdoll_human.js && node --check scripts/visual-audit.mjs && npm test",
     "test:browser": "node scripts/browser-test.mjs",
     "audit:visual": "node scripts/visual-audit.mjs"
