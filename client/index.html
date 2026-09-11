@@ -24,7 +24,7 @@
       <p>Bodycam-style live-fire sandbox with active physical reactions. Soldiers fight, stumble, brace, fall, recover and remain fully interactive as ragdolls.</p>
       <button id="deployBtn" class="primary">ENTER LIVE WARZONE</button>
       <button id="bootSettingsBtn">SETTINGS</button>
-      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · LMB FIRE · G FRAG · B WAR/LAB · T SPAWN · K FLOP · E DRAG</div>
+      <div class="controls">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · RMB AIM · HOLD LMB FIRE · G FRAG · B WAR/LAB · T SPAWN · K FLOP · E DRAG</div>
       <div id="bootStatus">Physics engine waiting for deployment.</div>
     </div>
   </div>
@@ -62,7 +62,7 @@
     <div id="feed"></div>
     <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">CONTACT ACTIVE</small></div>
     <div class="ammo"><b id="ammo">30</b><span>/</span><b id="reserve">120</b><small>5.56×45</small></div>
-    <div class="help">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · LMB FIRE · RMB AIM · B WAR/LAB · T SPAWN · K FLOP · J FLOP ALL · E DRAG · Q SHOVE · Y RECOVER · DEL REMOVE · H RESET · G FRAG</div>
+    <div class="help">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · HOLD LMB FIRE · RMB AIM · B WAR/LAB · T SPAWN · K FLOP · J FLOP ALL · E DRAG · Q SHOVE · Y RECOVER · DEL REMOVE · H RESET · G FRAG</div>
     <div id="deathCard" hidden><b>BODYCAM SIGNAL LOST</b><span>Press SPACE to redeploy</span></div>
   </div>
 
@@ -74,6 +74,7 @@
   <script type="module" src="./camera_stability.js"></script>
   <script type="module" src="./warzone.js"></script>
   <script type="module" src="./game.js"></script>
+  <script type="module" src="./weapon_auto.js"></script>
   <script type="module" src="./input_guard.js"></script>
 </body>
 </html>
