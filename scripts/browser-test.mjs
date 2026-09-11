@@ -99,11 +99,26 @@ try {
   await page.waitForTimeout(400);
   assert.ok(await page.evaluate(() => lab.camera.fov < 70));
   await page.mouse.up({ button: "right" });
-  const before = await page.evaluate(() => lab.camera.position.x);
+
+  // D means camera-right, not global +X. The camera can legitimately be yawed
+  // after aiming at a ragdoll that has stumbled sideways, so assert horizontal
+  // displacement instead of assuming a world-axis direction.
+  const before = await page.evaluate(() => ({
+    x: lab.camera.position.x,
+    z: lab.camera.position.z,
+  }));
   await page.keyboard.down("d");
   await page.waitForTimeout(250);
   await page.keyboard.up("d");
-  assert.ok((await page.evaluate(() => lab.camera.position.x)) > before);
+  const after = await page.evaluate(() => ({
+    x: lab.camera.position.x,
+    z: lab.camera.position.z,
+  }));
+  assert.ok(
+    Math.hypot(after.x - before.x, after.z - before.z) > 0.2,
+    "D strafe should move the camera horizontally",
+  );
+
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.pointerLockElement);
   assert.deepEqual(errors, []);
