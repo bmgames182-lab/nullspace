@@ -13,54 +13,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Parse browser modules
+
+      - name: Parse focused simulation
         run: |
-          node --check client/game.js
-          node --check client/world.js
-          node --check client/audio.js
-          node --check client/ragdoll.js
-          node --check client/soldier_skin.js
-          node --check client/combat_plus.js
-          node --check client/playground.js
-          node --check client/input_guard.js
-          node --check client/active_ragdoll_plus.js
-          node --check client/warzone.js
-          node --check client/weapon_auto.js
-      - name: Verify warzone entrypoint
+          node --check client/euphoria_lab.js
+
+      - name: Verify focused entrypoint
         run: |
-          grep -q 'GHOSTCAM' client/index.html
-          grep -q 'LIVE WARZONE' client/index.html
-          grep -q './playground.js' client/index.html
-          grep -q './active_ragdoll_plus.js' client/index.html
-          grep -q './warzone.js' client/index.html
-          grep -q './game.js' client/index.html
-          grep -q './weapon_auto.js' client/index.html
-          test ! -e client/camera_stability.js
-          test ! -e worker/src/index.ts
-      - name: Guard movement collision regression
+          grep -Fq 'ACTIVE BODY LAB' client/index.html
+          grep -Fq './euphoria_lab.js' client/index.html
+          grep -Fq 'ONE HUMAN' client/index.html
+          grep -Fq 'ONE WEAPON' client/index.html
+          ! grep -Fq './game.js' client/index.html
+          ! grep -Fq './warzone.js' client/index.html
+          ! grep -Fq './combat_plus.js' client/index.html
+
+      - name: Guard active-ragdoll core
         run: |
-          # The floor must remain a Rapier collider but must never enter the X/Z obstacle list,
-          # otherwise every player/AI move and every LOS query is blocked by the whole map.
-          grep -Fq 'fixedBox(0,-.15,0,70,.3,70,groundMat,true,false)' client/world.js
-          grep -Fq 'if(navCollide)obstacles.push' client/world.js
-          # T-spawned/reset playground dummies live outside game.js soldiers[] and need their own tick.
-          grep -Fq 's.__playgroundStandalone=true' client/playground.js
-          grep -Fq 'if(s.__playgroundStandalone&&!s.__playgroundDisposed)s.update?.(dt,now)' client/playground.js
-      - name: Guard FPS camera regression
+          grep -Fq 'class ActiveHuman' client/euphoria_lab.js
+          grep -Fq 'footQuality(body)' client/euphoria_lab.js
+          grep -Fq 'cohere(parent,child' client/euphoria_lab.js
+          grep -Fq 'beginStep(' client/euphoria_lab.js
+          grep -Fq 'lowerArmL' client/euphoria_lab.js
+          grep -Fq 'let human=new ActiveHuman(0,0)' client/euphoria_lab.js
+
+      - name: Guard weapon and FPS controls
         run: |
-          # PointerLockControls must own yaw/pitch. Direct player-camera roll writes reintroduce
-          # quaternion/Euler feedback and the sideways "washing machine" horizon bug.
-          if grep -Eq 'camera\.rotation\.z[[:space:]]*=' client/game.js; then
-            echo 'Direct camera roll assignment found in game.js' >&2
+          grep -Fq 'new PointerLockControls' client/euphoria_lab.js
+          grep -Fq 'const gun=new THREE.Group()' client/euphoria_lab.js
+          grep -Fq 'function fire()' client/euphoria_lab.js
+          grep -Fq 'human.hit(' client/euphoria_lab.js
+          grep -Fq 'aiming?68:82' client/euphoria_lab.js
+          if grep -Eq 'camera\.rotation\.z[[:space:]]*=' client/euphoria_lab.js; then
+            echo 'Direct camera roll assignment found in focused lab' >&2
             exit 1
           fi
-          grep -Fq 'camera.rotation.order="YXZ"' client/game.js
-          grep -Fq 'lookEuler.z=0' client/game.js
-          grep -Fq 'controls.addEventListener("change",stabiliseLook)' client/game.js
-          grep -Fq 'adsFactor=aiming?.08:1' client/game.js
-          grep -Fq 'bodycamLean' client/game.js
-      - name: Guard active-ragdoll and combat regression
-        run: |
-          grep -Fq '__ghostcamActivePlus' client/active_ragdoll_plus.js
-          grep -Fq 'LIVE WAR // AI ENGAGED' client/warzone.js
-          grep -Fq 'setTimeout(repeat,104)' client/weapon_auto.js
