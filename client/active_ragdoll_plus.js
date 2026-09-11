@@ -10,9 +10,14 @@ if(!proto.__ghostcamActivePlus){
   const baseImpulse=proto.impulse,baseBrace=proto.brace;
 
   proto.impulse=function(direction,strength=4,part="torso"){
-    const out=baseImpulse.call(this,direction,strength,part);
+    // Recoverable actors absorb ordinary bullet/shove impulses through the active body instead of
+    // being launched like corpses. Very large blast impulses retain more energy. Dead bodies stay limp/full-force.
+    const physicalStrength=this.recoverable&&!this.dead?strength*(strength>9?.72:.60):strength;
+    const out=baseImpulse.call(this,direction,physicalStrength,part);
     const x=Number(direction?.x)||0,z=Number(direction?.z)||0,len=Math.hypot(x,z)||1;
     this.__gcReflex={age:this.age,part,strength:clamp(strength/8,0,1),dir:{x:x/len,z:z/len},seed:Math.random()*Math.PI*2};
+    // Keep behavioural severity based on the original game hit, not the damped physics impulse.
+    this.impactSeverity=Math.max(this.impactSeverity||0,clamp(strength/8+(part==="head"?.12:0),0,1));
     return out
   };
 
