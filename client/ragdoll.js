@@ -65,11 +65,16 @@ export class CombatRagdoll{
     const torso=this.part("torso"),pelvis=this.part("pelvis");if(!torso||!pelvis)return 99;
     const a=torso.linvel(),b=pelvis.linvel(),av=torso.angvel();return Math.hypot(a.x,a.y,a.z)*.48+Math.hypot(b.x,b.y,b.z)*.36+Math.hypot(av.x,av.y,av.z)*.18
   }
+  footSupport(body){
+    if(!body)return 0;const p=body.translation(),v=body.linvel();if(p.y>.205)return 0;
+    const q=body.rotation();tmpQ.set(q.x,q.y,q.z,q.w);tmpUp.copy(UP).applyQuaternion(tmpQ);
+    const height=clamp((.205-p.y)/.13,0,1),flat=clamp((tmpUp.y-.30)/.70,0,1),vertical=clamp(1-Math.abs(v.y)/1.15,0,1);
+    return height*flat*vertical
+  }
   getSupportCenter(){
-    const l=this.part("footL"),r=this.part("footR"),lp=l?.translation(),rp=r?.translation();let x=0,z=0,n=0;
-    if(lp&&lp.y<.18){x+=lp.x;z+=lp.z;n++}if(rp&&rp.y<.18){x+=rp.x;z+=rp.z;n++}
-    if(!n){const p=this.part("pelvis")?.translation();return p?{x:p.x,z:p.z,count:0}:{x:0,z:0,count:0}}
-    return{x:x/n,z:z/n,count:n}
+    const l=this.part("footL"),r=this.part("footR"),lp=l?.translation(),rp=r?.translation(),lw=this.footSupport(l),rw=this.footSupport(r),weight=lw+rw;
+    if(weight>.001)return{x:(lp.x*lw+rp.x*rw)/weight,z:(lp.z*lw+rp.z*rw)/weight,count:weight,left:lw,right:rw};
+    const p=this.part("pelvis")?.translation();return p?{x:p.x,z:p.z,count:0,left:0,right:0}:{x:0,z:0,count:0,left:0,right:0}
   }
   canRecover(){
     if(!this.recoverable||this.dead||this.age<1.45)return false;
@@ -94,6 +99,11 @@ export class CombatRagdoll{
     if(!body)return;const q=body.rotation();tmpQ.set(q.x,q.y,q.z,q.w);tmpUp.copy(UP).applyQuaternion(tmpQ);tmpAxis.copy(tmpUp).cross(UP);const av=body.angvel();
     const ix=clamp(tmpAxis.x*gain-av.x*damping,-gain,gain)*frame,iy=clamp(-av.y*damping*.42,-gain*.25,gain*.25)*frame,iz=clamp(tmpAxis.z*gain-av.z*damping,-gain,gain)*frame;
     body.applyTorqueImpulse({x:ix,y:iy,z:iz},true)
+  }
+  stabiliseFoot(body,quality,active,frame){
+    if(!body||quality<=.05||active<=.02)return;const q=body.rotation();tmpQ.set(q.x,q.y,q.z,q.w);tmpUp.copy(UP).applyQuaternion(tmpQ);tmpAxis.copy(tmpUp).cross(UP);const av=body.angvel();
+    const gain=.0105*quality*active,damping=.0028*quality*active;
+    body.applyTorqueImpulse({x:clamp(tmpAxis.x*gain-av.x*damping,-.012,.012)*frame,y:0,z:clamp(tmpAxis.z*gain-av.z*damping,-.012,.012)*frame},true)
   }
 
   beginCaptureStep(pelvis,ftL,ftR,errX,errZ,pv,tmpSide){
@@ -135,17 +145,18 @@ export class CombatRagdoll{
       const chestLift=clamp((1.43-tp.y)*.035-tv.y*.004,-.010,.030)*active*frame;if(chestLift>0)torso.applyImpulse({x:0,y:chestLift,z:0},true)
     }
 
-    // Centre of mass versus support polygon. This is the core of the active stumble controller.
+    // Centre of mass versus physically credible support. A low but tipped/bouncing foot only counts
+    // partially, so the controller cannot mistake the side of a boot for a stable planted stance.
     const support=this.getSupportCenter(),comX=pp.x*.55+tp.x*.45,comZ=pp.z*.55+tp.z*.45,errX=comX-support.x,errZ=comZ-support.z;
-    const err=Math.hypot(errX,errZ),speed=Math.hypot(pv.x,pv.z);this.supportQuality=clamp((support.count/2)*1.15-err*1.4-speed*.10,0,1);
-    if(support.count&&since>.10){
+    const err=Math.hypot(errX,errZ),speed=Math.hypot(pv.x,pv.z);this.supportQuality=clamp((support.count/2)*1.18-err*1.4-speed*.10,0,1);
+    if(support.count>.05&&since>.10){
       const catchGain=clamp(.006+.016*active,0,.022),ix=clamp(-errX*.030-pv.x*catchGain,-.028,.028)*frame,iz=clamp(-errZ*.030-pv.z*catchGain,-.028,.028)*frame;
       pelvis.applyImpulse({x:ix,y:0,z:iz},true)
     }
 
     // Build body-forward/side directions for capture stepping.
     const pq=pelvis.rotation();tmpQ.set(pq.x,pq.y,pq.z,pq.w);tmpForward.copy(FORWARD).applyQuaternion(tmpQ);tmpForward.y=0;if(tmpForward.lengthSq()<.001)tmpForward.set(this.impactDir.x,0,this.impactDir.z);tmpForward.normalize();tmpSide.set(tmpForward.z,0,-tmpForward.x);
-    const needsStep=(err>.11||speed>.48||upright<.80)&&upright>.12&&pp.y>.38&&this.age>.10;
+    const needsStep=(err>.11||speed>.48||upright<.80||support.count<.72)&&upright>.12&&pp.y>.38&&this.age>.10;
 
     // A real catch step is a committed action: choose one swing foot, move it to a predicted capture
     // point, plant it, then reassess. This replaces the old left/right flip every few frames.
@@ -164,18 +175,19 @@ export class CombatRagdoll{
           foot.applyImpulse({x:sx,y:sy,z:sz},true);shin.applyImpulse({x:sx*.50,y:Math.max(0,sy)*.52,z:sz*.50},true);thigh.applyImpulse({x:sx*.28,y:Math.max(0,sy)*.28,z:sz*.28},true);
           if((phase>.58&&dist<.11&&fp.y<.14)||phase>=1){this.stepPhase="plant";this.stepEndsAt=this.age+.13}
         }else if(this.stepPhase==="plant"){
-          const v=foot.linvel();foot.applyImpulse({x:clamp(-v.x*.010,-.018,.018)*frame,y:fp.y>.11?-.006*frame:-.002*frame,z:clamp(-v.z*.010,-.018,.018)*frame},true);
+          const v=foot.linvel(),q=this.footSupport(foot);foot.applyImpulse({x:clamp(-v.x*.010,-.018,.018)*frame,y:fp.y>.11?-.006*frame:-.002*frame,z:clamp(-v.z*.010,-.018,.018)*frame},true);this.stabiliseFoot(foot,q,active,frame);
           if(this.age>=this.stepEndsAt){this.stepPhase="idle";this.stepCooldownUntil=this.age+.18+Math.random()*.10}
         }
       }else{this.stepPhase="idle";this.stepCooldownUntil=this.age+.20}
 
       // The non-swing foot is the actual support leg during the catch. Keep it planted instead of
       // allowing both feet to skate while the controller tries to move the body.
-      if(supportFoot){const sp=supportFoot.translation(),sv=supportFoot.linvel();if(sp.y<.16)supportFoot.applyImpulse({x:clamp(-sv.x*.010,-.017,.017)*frame,y:-.0025*active*frame,z:clamp(-sv.z*.010,-.017,.017)*frame},true)}
+      if(supportFoot){const q=this.footSupport(supportFoot),sv=supportFoot.linvel();if(q>.05){supportFoot.applyImpulse({x:clamp(-sv.x*.010*q,-.017,.017)*frame,y:-.0025*active*q*frame,z:clamp(-sv.z*.010*q,-.017,.017)*frame},true);this.stabiliseFoot(supportFoot,q,active,frame)}}
     }
 
-    // When no capture step is active, both grounded feet provide moderate traction.
-    if(this.stepPhase==="idle")for(const foot of [ftL,ftR]){if(!foot)continue;const p=foot.translation(),v=foot.linvel();if(p.y<.14)foot.applyImpulse({x:clamp(-v.x*.006,-.012,.012)*frame,y:-.002*active*frame,z:clamp(-v.z*.006,-.012,.012)*frame},true)}
+    // When no capture step is active, both credible planted feet provide traction and a tiny
+    // anti-roll ankle reflex. Tipped or bouncing feet are deliberately not treated as anchors.
+    if(this.stepPhase==="idle")for(const [foot,q] of [[ftL,support.left],[ftR,support.right]]){if(!foot||q<=.05)continue;const v=foot.linvel();foot.applyImpulse({x:clamp(-v.x*.006*q,-.012,.012)*frame,y:-.002*active*q*frame,z:clamp(-v.z*.006*q,-.012,.012)*frame},true);this.stabiliseFoot(foot,q,active,frame)}
 
     // Protective reach: arms go toward the direction of travel before impact, then push back off the
     // floor if the hands get low. This gives catches/braces instead of permanently dead arms.
