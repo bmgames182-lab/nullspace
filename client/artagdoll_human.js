@@ -13,7 +13,7 @@ const q = (value) => new THREE.Quaternion(value.x, value.y, value.z, value.w);
 export class ArtagdollHuman extends ActiveHuman {
   initializeControl() {
     super.initializeControl();
-    this.controllerStyle = "artagdoll-inspired-v2";
+    this.controllerStyle = "artagdoll-inspired-v3";
     this.state = "balance";
     this.history = ["balance"];
     this.reaction = {
@@ -48,7 +48,7 @@ export class ArtagdollHuman extends ActiveHuman {
     const leg = /thigh|shin|foot/.test(part);
     const arm = /Arm/.test(part);
     const head = part === "head";
-    const impulseScale = head ? 0.58 : torso ? 0.52 : leg ? 0.65 : arm ? 0.68 : 0.58;
+    const impulseScale = head ? 0.52 : torso ? 0.52 : leg ? 0.56 : arm ? 0.4 : 0.52;
     const impulse = direction
       .clone()
       .multiplyScalar(clamp(strength, 0, 28) * impulseScale);
@@ -195,24 +195,38 @@ export class ArtagdollHuman extends ActiveHuman {
       this.downTime += dt;
       this.balanceTime = 0;
       this.setState("down");
+    } else if (this.state === "collapse") {
+      this.balanceTime = 0;
+    } else if (freshReaction) {
+      this.downTime = 0;
+      this.balanceTime = 0;
+      this.setState("react");
+    } else if (falling) {
+      this.downTime = 0;
+      this.balanceTime = 0;
+      this.setState("fall");
+    } else if (unstable) {
+      this.downTime = 0;
+      this.balanceTime = 0;
+      this.setState("stumble");
     } else {
       this.downTime = 0;
-      if (freshReaction) {
-        this.balanceTime = 0;
-        this.setState("react");
-      } else if (falling) {
-        this.balanceTime = 0;
-        this.setState("fall");
-      } else if (unstable) {
-        this.balanceTime = 0;
-        this.setState("stumble");
-      } else {
-        this.balanceTime += dt;
-        if (this.balanceTime > 0.22) this.setState("balance");
-      }
+      this.balanceTime += dt;
+      if (this.balanceTime > 0.22) this.setState("balance");
     }
 
-    const rescuing = this.state !== "down" && this.state !== "limp";
+    // Give a bad fall a short rescue window. If the torso is still folded after
+    // that window, stop doing the endless running-at-90-degrees thing and let
+    // the body complete the ragdoll fall.
+    if (
+      this.state === "fall" &&
+      this.stateTime > 1.05 &&
+      (cp.y < 0.95 || chestUp < 0.52)
+    )
+      this.setState("collapse");
+
+    const rescuing =
+      this.state !== "down" && this.state !== "collapse" && this.state !== "limp";
     const reactionEnvelope =
       Math.exp(-this.reaction.age * 4.8) * this.reaction.strength;
     const headActivity = clamp(1 - this.reaction.headStun * 0.48, 0.42, 1);
@@ -319,9 +333,6 @@ export class ArtagdollHuman extends ActiveHuman {
       this.legTargets(side, target, targets);
     }
 
-    // Keep the pelvis supported while the upper body is allowed to give.
-    // This is what produces a stumble instead of the whole character switching
-    // off and collapsing on the first hit.
     if (rescuing && grounded) {
       const available = ["L", "R"].map((side) => ({
         side,
@@ -382,6 +393,17 @@ export class ArtagdollHuman extends ActiveHuman {
             this.state === "react" ? 78 : 105,
             dt,
           );
+
+      // During the rescue window, actively try to unfold the torso through the
+      // skeleton instead of only holding the pelvis upright.
+      if (this.state === "fall" && this.stateTime < 1.05) {
+        const chestUpright = v(UP)
+          .applyQuaternion(q(chest.rotation()))
+          .cross(UP)
+          .multiplyScalar(145)
+          .addScaledVector(v(chest.angvel()).sub(v(pelvis.angvel())), -18);
+        this.torquePair(pelvis, chest, chestUpright, 62, dt);
+      }
     }
 
     const part = this.reaction.part;
@@ -448,12 +470,19 @@ export class ArtagdollHuman extends ActiveHuman {
         shoulderPitch = -0.45;
         shoulderRoll = sign * 0.42;
         elbow = -0.9;
-      } else if (this.state === "fall") {
-        shoulderPitch = clamp(-0.2 - fallDirection.z * 0.2, -0.5, 0.08);
-        shoulderRoll = sign * 0.5;
-        elbow = -0.42;
+      } else if (this.state === "fall" || this.state === "collapse") {
+        const chaos = clamp(horizontalSpeed / 1.4 + (1 - Math.max(chestUp, 0)), 0, 1);
+        shoulderPitch = clamp(
+          -0.2 - fallDirection.z * 0.2 + Math.sin(this.age * 11 + sign) * 0.12 * chaos,
+          -0.58,
+          0.12,
+        );
+        shoulderRoll = sign * (0.44 + chaos * 0.18);
+        elbow = -0.42 - chaos * 0.12;
       } else if (this.state === "stumble") {
-        shoulderRoll = sign * (0.22 + Math.min(horizontalSpeed, 1.5) * 0.12);
+        const chaos = clamp(horizontalSpeed / 1.2 + balanceError * 2, 0, 1);
+        shoulderPitch = Math.sin(this.age * 10 + sign) * 0.1 * chaos;
+        shoulderRoll = sign * (0.22 + chaos * 0.22);
         elbow = -0.26;
       }
 
@@ -463,10 +492,34 @@ export class ArtagdollHuman extends ActiveHuman {
       targets["lowerArm" + side] = new THREE.Quaternion().setFromEuler(
         new THREE.Euler(elbow, 0, 0),
       );
+
+      // Soft procedural brace: when a fall is really happening, reach the
+      // forearms toward the floor in the direction of travel. Equal/opposite
+      // forces keep this physical rather than teleporting the limb.
+      if ((this.state === "fall" || this.state === "collapse") && cp.y < 1.15) {
+        const arm = this.body("lowerArm" + side);
+        const goal = cp
+          .clone()
+          .addScaledVector(fallDirection, 0.32)
+          .add(new THREE.Vector3(sign * 0.24, -0.48, 0));
+        goal.y = Math.max(0.12, goal.y);
+        const braceForce = goal
+          .sub(v(arm.translation()))
+          .multiplyScalar(75)
+          .addScaledVector(v(arm.linvel()).sub(v(chest.linvel())), -8);
+        this.forcePair(
+          arm,
+          chest,
+          braceForce,
+          55 * (1 - this.injury["arm" + side] * 0.72),
+          dt,
+        );
+      }
     }
 
-    if (this.state === "down") {
-      const floorActivity = this.reaction.age < 0.9 ? 0.18 : 0.08;
+    if (this.state === "down" || this.state === "collapse") {
+      const floorActivity =
+        this.state === "collapse" ? 0.12 : this.reaction.age < 0.9 ? 0.18 : 0.08;
       for (const muscle of this.muscles) {
         const [a, b, , , gain, damping, cap] = muscle;
         let strength = floorActivity * headActivity;
@@ -508,7 +561,7 @@ export class ArtagdollHuman extends ActiveHuman {
         strength *= headHit && this.reaction.age < 0.45 ? 0.24 : 0.66;
       } else {
         strength *=
-          this.state === "react" ? 0.48 : this.state === "fall" ? 0.55 : 0.74;
+          this.state === "react" ? 0.48 : this.state === "fall" ? 0.6 : 0.74;
       }
 
       this.cohere(
