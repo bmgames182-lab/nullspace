@@ -33,12 +33,61 @@ const scenarios = [
 
 const frames = [
   { id: "000", wait: 0 },
-  { id: "120", wait: 120 },
-  { id: "350", wait: 230 },
-  { id: "900", wait: 550 },
-  { id: "1800", wait: 900 },
-  { id: "3500", wait: 1700 },
+  { id: "080", wait: 80 },
+  { id: "180", wait: 100 },
+  { id: "360", wait: 180 },
+  { id: "700", wait: 340 },
+  { id: "1200", wait: 500 },
+  { id: "2200", wait: 1000 },
+  { id: "3500", wait: 1300 },
 ];
+
+function sampleAt(entry, id) {
+  return entry.samples.find((sample) => sample.t === id)?.snapshot;
+}
+
+function assertBehavior(entry) {
+  const id = entry.scenario.id;
+  const early = sampleAt(entry, "180");
+  const mid = sampleAt(entry, "700");
+  const late = sampleAt(entry, "2200");
+  const final = sampleAt(entry, "3500");
+
+  assert.ok(early && mid && late && final, `${id}: missing audit samples`);
+  assert.ok(final.parts.pelvis.position.y > -0.03, `${id}: pelvis tunneled below ground`);
+  assert.ok(
+    Object.values(final.parts).every(({ position, velocity }) =>
+      [position.x, position.y, position.z, velocity.x, velocity.y, velocity.z].every(Number.isFinite),
+    ),
+    `${id}: non-finite rigid body state`,
+  );
+
+  if (id === "arm-right") {
+    assert.ok(mid.parts.pelvis.position.y > 0.58, "arm hit should stay mostly local");
+    assert.ok(!["down", "collapse"].includes(mid.state), "arm hit should not topple the whole body");
+  }
+
+  if (id === "head-front") {
+    assert.ok(early.parts.pelvis.position.y > 0.68, "head hit should not buckle both legs");
+    assert.ok(!["down", "collapse"].includes(mid.state), "head hit should preserve standing support");
+  }
+
+  if (id === "thigh-left" || id === "shin-left") {
+    assert.ok(early.parts.pelvis.position.y > 0.5, `${id}: leg reaction collapsed too early`);
+    assert.ok(early.metrics.steps > 0, `${id}: struck leg should trigger a rescue step`);
+  }
+
+  if (id.startsWith("chest-")) {
+    assert.ok(early.parts.pelvis.position.y > 0.53, `${id}: torso hit collapsed too early`);
+    if (id === "chest-left" || id === "chest-right")
+      assert.ok(early.metrics.steps > 0, `${id}: lateral torso hit needs a lateral catch step`);
+  }
+
+  if (id === "repeated-light-chest") {
+    assert.ok(final.parts.pelvis.position.y > 0.72, "three light torso hits should be recoverable");
+    assert.ok(!["down", "collapse"].includes(final.state), "light hits should not leave a floor ragdoll");
+  }
+}
 
 let browser;
 try {
@@ -74,8 +123,8 @@ try {
   await page.waitForFunction(() => window.lab?.human.age > 2 && lab.human.state === "balance");
 
   await page.evaluate(() => {
-    lab.camera.position.set(3.35, 1.72, 4.35);
-    lab.camera.fov = 58;
+    lab.camera.position.set(2.15, 1.55, 2.9);
+    lab.camera.fov = 46;
     lab.camera.updateProjectionMatrix();
     for (const child of lab.camera.children) {
       if (child.type === "Group") child.visible = false;
@@ -89,8 +138,8 @@ try {
     await page.waitForFunction(() => lab.human.age > 2 && lab.human.state === "balance");
     await page.evaluate(() => {
       const chest = lab.human.body("chest").translation();
-      lab.camera.position.set(3.35, 1.72, 4.35);
-      lab.camera.lookAt(chest.x, 1.03, chest.z);
+      lab.camera.position.set(2.15, 1.55, 2.9);
+      lab.camera.lookAt(chest.x, 0.98, chest.z);
     });
 
     const before = await page.evaluate(() => lab.snapshot());
@@ -118,15 +167,9 @@ try {
       });
     }
 
-    const final = samples.at(-1).snapshot;
-    assert.ok(final.parts.pelvis.position.y > -0.03, `${scenario.id}: pelvis tunneled below ground`);
-    assert.ok(
-      Object.values(final.parts).every(({ position, velocity }) =>
-        [position.x, position.y, position.z, velocity.x, velocity.y, velocity.z].every(Number.isFinite),
-      ),
-      `${scenario.id}: non-finite rigid body state`,
-    );
-    report.scenarios.push({ scenario, before, samples });
+    const entry = { scenario, before, samples };
+    assertBehavior(entry);
+    report.scenarios.push(entry);
   }
 
   assert.deepEqual(errors, []);
@@ -134,7 +177,9 @@ try {
     new URL("audit.json", root),
     JSON.stringify(report, null, 2),
   );
-  console.log(`Visual audit passed: ${scenarios.length} deterministic impact scenarios captured.`);
+  console.log(
+    `Visual audit passed: ${scenarios.length} deterministic close-framed impact scenarios captured and behavior-checked.`,
+  );
 } finally {
   await browser?.close();
   server.kill();
