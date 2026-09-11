@@ -34,6 +34,13 @@ try {
   await page.goto("http://127.0.0.1:8001/?test");
   await page.waitForFunction(() => window.lab?.human.age > 2);
   assert.equal(await page.evaluate(() => lab.human.state), "balance");
+
+  // The browser test verifies targeting/raycast plumbing, not weapon-spread RNG.
+  // Keep normal gameplay untouched while making exact body-part assertions repeatable.
+  await page.evaluate(() => {
+    Math.random = () => 0.5;
+  });
+
   await page.screenshot({
     path: new URL("standing.png", artifacts).pathname.replace(/^\/(\w:)/, "$1"),
   });
@@ -44,8 +51,30 @@ try {
     await page.keyboard.press("r");
     await page.waitForFunction(() => lab.human.age > 2);
     await page.evaluate((name) => lab.aimAt(name), name);
-    await page.mouse.click(640, 360);
-    await page.waitForFunction(() => lab.human.hitAge < 1);
+
+    // camera.lookAt() should put the requested rigid-body centre directly on the
+    // crosshair. Check that before firing so a future pointer/camera regression
+    // fails with a useful assertion instead of a 30-second hit timeout.
+    const aimDot = await page.evaluate((name) => {
+      const p = lab.human.body(name).translation();
+      const origin = lab.camera.position;
+      const tx = p.x - origin.x,
+        ty = p.y - origin.y,
+        tz = p.z - origin.z;
+      const length = Math.hypot(tx, ty, tz);
+      const direction = lab.camera.getWorldDirection(origin.clone());
+      return (direction.x * tx + direction.y * ty + direction.z * tz) / length;
+    }, name);
+    assert.ok(aimDot > 0.9999, `${name} is not centred before firing (${aimDot})`);
+
+    // Do not call mouse.click(x, y) while pointer-lock is active: Playwright may
+    // synthesize a mousemove to that coordinate and rotate the FPS camera after
+    // aimAt(). down/up exercises the real LMB handler without moving the pointer.
+    await page.mouse.down({ button: "left" });
+    await page.mouse.up({ button: "left" });
+    await page.waitForFunction(() => lab.human.hitAge < 1, undefined, {
+      timeout: 5000,
+    });
     const hitPart = await page.evaluate(() => lab.human.lastHit.part);
     assert.equal(hitPart, name);
     await page.waitForTimeout(240);
@@ -83,7 +112,7 @@ try {
     JSON.stringify({ errors, records }, null, 2),
   );
   console.log(
-    "Browser passed: real pointer lock, four aimed body-part shots, ADS, D strafe, reset, ESC, no page errors.",
+    "Browser passed: real pointer lock, four deterministic aimed body-part shots, ADS, D strafe, reset, ESC, no page errors.",
   );
 } finally {
   await browser?.close();
