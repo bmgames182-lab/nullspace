@@ -1,0 +1,32 @@
+{
+  "name": "nullspace",
+  "version": "1.0.0",
+  "description": "Original browser-based bodycam ragdoll playground and physics sandbox.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/physics.test.mjs",
+    "check": "node --check client/euphoria_lab.js && node --check client/active_human.js && npm test",
+    "test:browser": "node scripts/browser-test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bmgames182-lab/nullspace.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/bmgames182-lab/nullspace/issues"
+  },
+  "homepage": "https://github.com/bmgames182-lab/nullspace#readme",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.19.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "private": true
+}

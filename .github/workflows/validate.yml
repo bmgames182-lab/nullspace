@@ -1,50 +1,37 @@
 name: validate
-
 on:
   push:
     branches: [main]
   pull_request:
-
+permissions:
+  contents: read
 jobs:
   client:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Parse focused simulation
-        run: |
-          node --check client/euphoria_lab.js
-
+          cache: npm
+      - run: npm ci
+      - name: Check syntax and simulate active ragdoll
+        run: npm run check
       - name: Verify focused entrypoint
         run: |
           grep -Fq 'ACTIVE BODY LAB' client/index.html
           grep -Fq './euphoria_lab.js' client/index.html
           grep -Fq 'ONE HUMAN' client/index.html
           grep -Fq 'ONE WEAPON' client/index.html
-          ! grep -Fq './game.js' client/index.html
-          ! grep -Fq './warzone.js' client/index.html
-          ! grep -Fq './combat_plus.js' client/index.html
-
-      - name: Guard active-ragdoll core
-        run: |
-          grep -Fq 'class ActiveHuman' client/euphoria_lab.js
-          grep -Fq 'footQuality(body)' client/euphoria_lab.js
-          grep -Fq 'cohere(parent,child' client/euphoria_lab.js
-          grep -Fq 'beginStep(' client/euphoria_lab.js
-          grep -Fq 'lowerArmL' client/euphoria_lab.js
-          grep -Fq 'let human=new ActiveHuman(0,0)' client/euphoria_lab.js
-
-      - name: Guard weapon and FPS controls
-        run: |
-          grep -Fq 'new PointerLockControls' client/euphoria_lab.js
-          grep -Fq 'const gun=new THREE.Group()' client/euphoria_lab.js
-          grep -Fq 'function fire()' client/euphoria_lab.js
-          grep -Fq 'human.hit(' client/euphoria_lab.js
-          grep -Fq 'aiming?68:82' client/euphoria_lab.js
-          if grep -Eq 'camera\.rotation\.z[[:space:]]*=' client/euphoria_lab.js; then
-            echo 'Direct camera roll assignment found in focused lab' >&2
-            exit 1
-          fi
+          ! grep -Eq './(game|warzone|combat_plus).js' client/index.html
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Exercise FPS and targeted body hits in browser
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence
+          path: test-results/
+          if-no-files-found: ignore
