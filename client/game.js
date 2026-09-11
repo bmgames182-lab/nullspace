@@ -21,13 +21,24 @@ bootStatus.textContent="Physics online. Ready for live fire.";
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:"high-performance"});
 renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.02;renderer.shadowMap.enabled=!!settings.highQuality;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(settings.fov,1,.045,130);scene.add(camera);
+camera.rotation.order="YXZ";
 const controls=new PointerLockControls(camera,document.body),audio=new BodycamAudio();
+controls.minPolarAngle=.07;controls.maxPolarAngle=Math.PI-.07;
+const lookEuler=new THREE.Euler(0,0,0,"YXZ");
+function stabiliseLook(){
+  const q=camera.quaternion;
+  if(!Number.isFinite(q.x)||!Number.isFinite(q.y)||!Number.isFinite(q.z)||!Number.isFinite(q.w)||q.lengthSq()<.0001){q.identity();return}
+  q.normalize();lookEuler.setFromQuaternion(q,"YXZ");
+  lookEuler.x=THREE.MathUtils.clamp(lookEuler.x,-Math.PI/2+.07,Math.PI/2-.07);lookEuler.z=0;
+  q.setFromEuler(lookEuler).normalize()
+}
+controls.addEventListener("change",stabiliseLook);
 const physics=new RAPIER.World({x:0,y:-9.81,z:0});physics.timestep=1/60;
 let arena=buildArena(scene,physics,RAPIER,{highQuality:settings.highQuality});
 
 const player={pos:new THREE.Vector3(-28,1.66,-26),velocity:new THREE.Vector2(),hp:100,maxHp:100,ammo:30,reserve:120,alive:true,stamina:100,team:"blue",recoil:0,walk:0,travel:0};
 camera.position.copy(player.pos);
-const keys=new Set();let running=false,aiming=false,flashlightOn=false,last=performance.now(),physicsAcc=0,lastShot=0,mouseSwayX=0,mouseSwayY=0,screenKick=0,roundWon=false;
+const keys=new Set();let running=false,aiming=false,flashlightOn=false,last=performance.now(),physicsAcc=0,lastShot=0,mouseSwayX=0,mouseSwayY=0,screenKick=0,bodycamLean=0,roundWon=false;
 const soldiers=[],hitMeshes=[],effects=[],raycaster=new THREE.Raycaster(),rayOrigin=new THREE.Vector3(),rayDir=new THREE.Vector3(),tmpA=new THREE.Vector3(),tmpB=new THREE.Vector3();
 
 // Tactical light.
@@ -112,7 +123,7 @@ function aiShoot(shooter,target,dist){
   if(target.player){damagePlayer(7+Math.floor(Math.random()*11),dir,shooter)}else if(target.alive){target.takeHit(14+Math.random()*13,dir,"torso","AI")}
 }
 function damagePlayer(amount,dir,shooter){if(!player.alive)return;player.hp=Math.max(0,player.hp-amount);hpEl.textContent=Math.ceil(player.hp);screenKick=Math.min(.16,screenKick+.055);damagePulse();audio.playerHit();statusText.textContent=player.hp<35?"CRITICAL":player.hp<65?"WOUNDED":"COMBAT EFFECTIVE";if(player.hp<=0)killPlayer(dir,shooter)}
-function killPlayer(dir,shooter){player.alive=false;keys.clear();aiming=false;document.body.classList.remove("aiming","sprinting");controls.unlock();deathCard.hidden=false;statusText.textContent="NO SIGNAL";addFeed("BODYCAM-07 DOWN",true);camera.rotation.z=.15;updateScore()}
+function killPlayer(dir,shooter){player.alive=false;keys.clear();aiming=false;bodycamLean=0;document.body.classList.remove("aiming","sprinting");controls.unlock();deathCard.hidden=false;statusText.textContent="NO SIGNAL";addFeed("BODYCAM-07 DOWN",true);updateScore()}
 
 function localShoot(){
   if(!running||!player.alive||!controls.isLocked)return;const now=performance.now();if(now-lastShot<92)return;lastShot=now;if(player.ammo<=0){audio.dry();return}player.ammo--;ammoEl.textContent=player.ammo;audio.gun(true);spawnShell();player.recoil=Math.min(.24,player.recoil+(aiming?.055:.085));screenKick=Math.min(.12,screenKick+.026);muzzleFlash.intensity=12;setTimeout(()=>muzzleFlash.intensity=0,32);
@@ -122,23 +133,28 @@ function localShoot(){
 function reload(){if(!player.alive||player.ammo>=30||player.reserve<=0)return;const take=Math.min(30-player.ammo,player.reserve);player.ammo+=take;player.reserve-=take;ammoEl.textContent=player.ammo;reserveEl.textContent=player.reserve;audio.reload()}
 
 function updateMovement(dt,now){
-  if(!running||!player.alive||!controls.isLocked){player.velocity.x=THREE.MathUtils.lerp(player.velocity.x,0,1-Math.exp(-dt*12));player.velocity.y=THREE.MathUtils.lerp(player.velocity.y,0,1-Math.exp(-dt*12));return}
+  if(!running||!player.alive||!controls.isLocked){player.velocity.x=THREE.MathUtils.lerp(player.velocity.x,0,1-Math.exp(-dt*12));player.velocity.y=THREE.MathUtils.lerp(player.velocity.y,0,1-Math.exp(-dt*12));bodycamLean=THREE.MathUtils.lerp(bodycamLean,0,1-Math.exp(-dt*10));return}
+  stabiliseLook();
   const forward=(keys.has("KeyW")?1:0)-(keys.has("KeyS")?1:0),side=(keys.has("KeyD")?1:0)-(keys.has("KeyA")?1:0),crouch=keys.has("ControlLeft")||keys.has("ControlRight"),sprint=(keys.has("ShiftLeft")||keys.has("ShiftRight"))&&forward>0&&!crouch&&!aiming;
   document.body.classList.toggle("sprinting",sprint);const speed=crouch?2.15:sprint?6.7:aiming?2.65:4.25;camera.getWorldDirection(tmpA);tmpA.y=0;tmpA.normalize();tmpB.set(tmpA.z,0,-tmpA.x);const wish=tmpA.multiplyScalar(forward).addScaledVector(tmpB,side);if(wish.lengthSq()>1)wish.normalize();const response=forward||side?12:18,targetX=wish.x*speed,targetZ=wish.z*speed;player.velocity.x=THREE.MathUtils.lerp(player.velocity.x,targetX,1-Math.exp(-dt*response));player.velocity.y=THREE.MathUtils.lerp(player.velocity.y,targetZ,1-Math.exp(-dt*response));const desired={x:player.pos.x+player.velocity.x*dt,z:player.pos.z+player.velocity.y*dt},r=moveCircle(player.pos,desired,arena.obstacles,.31),moved=Math.hypot(r.x-player.pos.x,r.z-player.pos.z);player.pos.x=r.x;player.pos.z=r.z;
   if(moved>.0001){player.walk+=moved*(sprint?3.2:crouch?2.1:2.65);player.travel+=moved;const stride=sprint?.82:crouch?1.05:.94;if(player.travel>=stride){player.travel%=stride;audio.step(sprint,crouch)}}
-  const motion=Math.min(1,moved/Math.max(dt,.001)/4),bob=Math.sin(player.walk*2)*.020*motion*(sprint?1.45:1),lean=(side*.008+Math.sin(player.walk)*.006*motion)*settings.shake;const targetY=crouch?1.23:1.66;player.pos.y=THREE.MathUtils.lerp(player.pos.y,targetY+bob,1-Math.exp(-dt*15));camera.position.copy(player.pos);camera.rotation.z=THREE.MathUtils.lerp(camera.rotation.z,-lean-screenKick*.12,1-Math.exp(-dt*8));
+  const motion=Math.min(1,moved/Math.max(dt,.001)/4),bob=Math.sin(player.walk*2)*.020*motion*(sprint?1.45:1);const targetY=crouch?1.23:1.66;player.pos.y=THREE.MathUtils.lerp(player.pos.y,targetY+bob,1-Math.exp(-dt*15));camera.position.copy(player.pos);
+  // Bodycam lean is presentation only. Never write camera.rotation.z: PointerLockControls owns the look quaternion.
+  const shake=THREE.MathUtils.clamp(Number(settings.shake)||0,0,1.4),adsFactor=aiming?.08:1,leanTarget=(-(side*.006+Math.sin(player.walk)*.0035*motion)-screenKick*.018)*shake*adsFactor;
+  bodycamLean=THREE.MathUtils.lerp(bodycamLean,THREE.MathUtils.clamp(leanTarget,-.018,.018),1-Math.exp(-dt*(aiming?15:9)));
   screenKick=THREE.MathUtils.lerp(screenKick,0,1-Math.exp(-dt*9));const targetFov=Number(settings.fov)+(sprint?4:0)-(aiming?13:0);camera.fov=THREE.MathUtils.lerp(camera.fov,targetFov,1-Math.exp(-dt*9));camera.updateProjectionMatrix()
 }
 function updateWeapon(dt){
   player.recoil=THREE.MathUtils.lerp(player.recoil,0,1-Math.exp(-dt*15));mouseSwayX=THREE.MathUtils.lerp(mouseSwayX,0,1-Math.exp(-dt*10));mouseSwayY=THREE.MathUtils.lerp(mouseSwayY,0,1-Math.exp(-dt*10));const sprint=document.body.classList.contains("sprinting"),aim=aiming;
-  const tx=aim?.005:.30-mouseSwayX,ty=aim?-.16:(sprint?-.43:-.29)-mouseSwayY,tz=aim?-.43:(sprint?-.42:-.58)+player.recoil*.34;viewmodel.position.x=THREE.MathUtils.lerp(viewmodel.position.x,tx,1-Math.exp(-dt*15));viewmodel.position.y=THREE.MathUtils.lerp(viewmodel.position.y,ty,1-Math.exp(-dt*15));viewmodel.position.z=THREE.MathUtils.lerp(viewmodel.position.z,tz,1-Math.exp(-dt*15));viewmodel.rotation.x=THREE.MathUtils.lerp(viewmodel.rotation.x,-player.recoil*.82+(sprint?.42:0),1-Math.exp(-dt*14));viewmodel.rotation.y=THREE.MathUtils.lerp(viewmodel.rotation.y,-mouseSwayX*.7,1-Math.exp(-dt*12));viewmodel.rotation.z=THREE.MathUtils.lerp(viewmodel.rotation.z,sprint?-.32:0,1-Math.exp(-dt*10))
+  const tx=aim?.005:.30-mouseSwayX,ty=aim?-.16:(sprint?-.43:-.29)-mouseSwayY,tz=aim?-.43:(sprint?-.42:-.58)+player.recoil*.34;viewmodel.position.x=THREE.MathUtils.lerp(viewmodel.position.x,tx,1-Math.exp(-dt*15));viewmodel.position.y=THREE.MathUtils.lerp(viewmodel.position.y,ty,1-Math.exp(-dt*15));viewmodel.position.z=THREE.MathUtils.lerp(viewmodel.position.z,tz,1-Math.exp(-dt*15));viewmodel.rotation.x=THREE.MathUtils.lerp(viewmodel.rotation.x,-player.recoil*.82+(sprint?.42:0),1-Math.exp(-dt*14));viewmodel.rotation.y=THREE.MathUtils.lerp(viewmodel.rotation.y,-mouseSwayX*.7,1-Math.exp(-dt*12));
+  const presentationRoll=(sprint?-.18:0)+bodycamLean;viewmodel.rotation.z=THREE.MathUtils.lerp(viewmodel.rotation.z,aim?bodycamLean*.18:presentationRoll,1-Math.exp(-dt*(aim?16:10)))
 }
 
 function spawnSquads(){
   for(const s of soldiers)s.dispose();soldiers.length=0;hitMeshes.length=0;const total=Math.round(settings.aiCount/2)*2,half=total/2;
   for(let i=0;i<half;i++)soldiers.push(new Soldier("blue",i,SPAWNS.blue[i%SPAWNS.blue.length]));for(let i=0;i<half;i++)soldiers.push(new Soldier("red",i+half,SPAWNS.red[i%SPAWNS.red.length]));roundWon=false;objectiveEl.textContent="ELIMINATE HOSTILE FORCE";updateScore()
 }
-function resetPlayer(){player.pos.set(-28,1.66,-26);player.velocity.set(0,0);player.hp=100;player.ammo=30;player.reserve=120;player.alive=true;player.recoil=0;camera.position.copy(player.pos);camera.rotation.z=0;hpEl.textContent="100";ammoEl.textContent="30";reserveEl.textContent="120";deathCard.hidden=true;statusText.textContent="COMBAT EFFECTIVE"}
+function resetPlayer(){player.pos.set(-28,1.66,-26);player.velocity.set(0,0);player.hp=100;player.ammo=30;player.reserve=120;player.alive=true;player.recoil=0;screenKick=0;bodycamLean=0;camera.position.copy(player.pos);stabiliseLook();hpEl.textContent="100";ammoEl.textContent="30";reserveEl.textContent="120";deathCard.hidden=true;statusText.textContent="COMBAT EFFECTIVE"}
 function restartSkirmish(){resetPlayer();spawnSquads();pause.hidden=true;hud.hidden=false;running=true;controls.lock();audio.ensure();addFeed("NEW CONTACTS // LIVE FIRE RESET")}
 function updateScore(){const blue=soldiers.filter(s=>s.team==="blue"&&s.alive).length+(player.alive?1:0),red=soldiers.filter(s=>s.team==="red"&&s.alive).length;teamsEl.textContent=`BLUE ${blue} · RED ${red}`;if(red===0&&!roundWon){roundWon=true;objectiveEl.textContent="AREA SECURE";addFeed("ALL HOSTILES NEUTRALIZED",true)}else if(blue===0&&!roundWon){roundWon=true;objectiveEl.textContent="FRIENDLY FORCE LOST"}}
 
@@ -168,6 +184,7 @@ applySettings();spawnSquads();
 function tick(now){
   requestAnimationFrame(tick);const dt=Math.min(.04,(now-last)/1000||.016);last=now;if(running){updateMovement(dt,now);updateWeapon(dt);for(const s of soldiers)s.update(dt,now);audio.update(now)}
   physicsAcc+=dt;let steps=0;while(physicsAcc>=1/60&&steps<3){physics.step();physicsAcc-=1/60;steps++}arena.update();updateEffects(dt);
+  stabiliseLook();
   const t=new Date(),clock=$("#clock");clock.textContent=`${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}:${String(t.getSeconds()).padStart(2,"0")}`;renderer.render(scene,camera)
 }
 requestAnimationFrame(tick);
