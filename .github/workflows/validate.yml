@@ -8,7 +8,7 @@ permissions:
 jobs:
   client:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,7 +27,7 @@ jobs:
           ! grep -Eq './(game|warzone|combat_plus).js' client/index.html
       - name: Install browser
         run: npx playwright install --with-deps chromium
-      - name: Exercise FPS and targeted body hits in browser
+      - name: Exercise FPS, blood FX, and targeted body hits in browser
         run: npm run test:browser
       - name: Capture deterministic visual physics audit
         run: npm run audit:visual

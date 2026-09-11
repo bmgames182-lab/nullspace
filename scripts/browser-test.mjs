@@ -52,9 +52,6 @@ try {
     await page.waitForFunction(() => lab.human.age > 2);
     await page.evaluate((name) => lab.aimAt(name), name);
 
-    // camera.lookAt() should put the requested rigid-body centre directly on the
-    // crosshair. Check that before firing so a future pointer/camera regression
-    // fails with a useful assertion instead of a 30-second hit timeout.
     const aimDot = await page.evaluate((name) => {
       const p = lab.human.body(name).translation();
       const origin = lab.camera.position;
@@ -67,9 +64,6 @@ try {
     }, name);
     assert.ok(aimDot > 0.9999, `${name} is not centred before firing (${aimDot})`);
 
-    // Do not call mouse.click(x, y) while pointer-lock is active: Playwright may
-    // synthesize a mousemove to that coordinate and rotate the FPS camera after
-    // aimAt(). down/up exercises the real LMB handler without moving the pointer.
     await page.mouse.down({ button: "left" });
     await page.mouse.up({ button: "left" });
     await page.waitForFunction(() => lab.human.hitAge < 1, undefined, {
@@ -77,6 +71,17 @@ try {
     });
     const hitPart = await page.evaluate(() => lab.human.lastHit.part);
     assert.equal(hitPart, name);
+
+    // A real gunshot must now create a persistent wound and visible blood FX.
+    await page.waitForFunction(
+      () => {
+        const b = lab.bloodStats();
+        return b.wounds > 0 && b.effects > 0;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+
     await page.waitForTimeout(240);
     await page.screenshot({
       path: new URL(name + "-reaction.png", artifacts).pathname.replace(
@@ -85,7 +90,11 @@ try {
       ),
     });
     await page.waitForTimeout(1800);
-    records.push({ name, snapshot: await page.evaluate(() => lab.snapshot()) });
+    records.push({
+      name,
+      snapshot: await page.evaluate(() => lab.snapshot()),
+      blood: await page.evaluate(() => lab.bloodStats()),
+    });
     await page.screenshot({
       path: new URL(name + "-later.png", artifacts).pathname.replace(
         /^\/(\w:)/,
@@ -93,6 +102,16 @@ try {
       ),
     });
   }
+
+  // Blood remains in the room when the ragdoll is reset, but K is a full cleanup.
+  const beforeCleanup = await page.evaluate(() => lab.bloodStats());
+  assert.ok(beforeCleanup.effects > 0, "blood should persist across ragdoll resets");
+  await page.keyboard.press("k");
+  await page.waitForFunction(() => {
+    const b = lab.bloodStats();
+    return b.wounds === 0 && b.effects === 0;
+  });
+
   await page.keyboard.press("r");
   await page.waitForFunction(() => lab.human.age > 2);
   await page.mouse.down({ button: "right" });
@@ -100,9 +119,6 @@ try {
   assert.ok(await page.evaluate(() => lab.camera.fov < 70));
   await page.mouse.up({ button: "right" });
 
-  // D means camera-right, not global +X. The camera can legitimately be yawed
-  // after aiming at a ragdoll that has stumbled sideways, so assert horizontal
-  // displacement instead of assuming a world-axis direction.
   const before = await page.evaluate(() => ({
     x: lab.camera.position.x,
     z: lab.camera.position.z,
@@ -124,10 +140,10 @@ try {
   assert.deepEqual(errors, []);
   await writeFile(
     new URL("browser.json", artifacts),
-    JSON.stringify({ errors, records }, null, 2),
+    JSON.stringify({ errors, records, beforeCleanup }, null, 2),
   );
   console.log(
-    "Browser passed: real pointer lock, four deterministic aimed body-part shots, ADS, D strafe, reset, ESC, no page errors.",
+    "Browser passed: real pointer lock, deterministic aimed shots, persistent blood FX, K cleanup, ADS, D strafe, reset, ESC, no page errors.",
   );
 } finally {
   await browser?.close();

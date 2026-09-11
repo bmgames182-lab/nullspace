@@ -3,6 +3,7 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 import RAPIER from "@dimforge/rapier3d-compat";
 
 import { ArtagdollHuman } from "./artagdoll_human.js";
+import { BloodSystem } from "./blood_fx.js";
 await RAPIER.init();
 
 const canvas = document.getElementById("game");
@@ -88,6 +89,15 @@ function addCover(x, y, z, sx, sy, sz, color = 0x34393b) {
 addCover(-3, 0.75, -2, 2.4, 1.5, 0.55);
 addCover(3, 0.55, -3, 1.6, 1.1, 1.2);
 
+const blood = new BloodSystem(scene, {
+  groundY: 0.012,
+  maxDroplets: 320,
+  maxStreams: 150,
+  maxPools: 90,
+  maxSmears: 120,
+  maxSplats: 180,
+});
+
 const v0 = new THREE.Vector3(),
   v1 = new THREE.Vector3();
 
@@ -172,6 +182,14 @@ function fire() {
     for (const [name, part] of human.parts) {
       if (part.collider.handle === hit.collider.handle) {
         human.hit(name, rayDir, 18, end);
+        blood.impact({
+          human,
+          part: name,
+          position: end,
+          direction: rayDir,
+          strength: 18,
+          fatal: human.dead,
+        });
         document.body.classList.add("hit");
         clearTimeout(hitTimer);
         hitTimer = setTimeout(() => document.body.classList.remove("hit"), 110);
@@ -196,6 +214,7 @@ function fire() {
 }
 
 function reset() {
+  blood.removeHuman(human);
   human.destroy();
   human = new ArtagdollHuman(world, scene, 0, 0);
   accumulator = 0;
@@ -217,13 +236,16 @@ document.addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (e.code === "Escape") controls.unlock();
   if (e.code === "KeyR" && !e.repeat) reset();
+  if (e.code === "KeyK" && !e.repeat) blood.clear();
 });
 document.addEventListener("keyup", (e) => keys.delete(e.code));
 
 const status = document.getElementById("status");
 controls.addEventListener(
   "lock",
-  () => (status.textContent = "LMB SHOOT · RMB AIM · WASD MOVE · R RESET"),
+  () =>
+    (status.textContent =
+      "LMB SHOOT · RMB AIM · WASD MOVE · R RESET · K CLEAN BLOOD"),
 );
 controls.addEventListener("unlock", () => {
   status.textContent = "CLICK TO ENTER";
@@ -275,6 +297,7 @@ function loop(now) {
     accumulator -= FIXED_DT;
   }
   human.sync();
+  blood.update(dt);
   recoil = THREE.MathUtils.lerp(recoil, 0, 1 - Math.exp(-dt * 16));
   camera.fov = THREE.MathUtils.lerp(
     camera.fov,
@@ -328,13 +351,28 @@ if (new URLSearchParams(location.search).has("test"))
     world,
     camera,
     reset,
+    bloodStats() {
+      return blood.stats();
+    },
+    clearBlood() {
+      blood.clear();
+    },
     aimAt(name) {
       const p = human.body(name).translation();
       camera.lookAt(p.x, p.y, p.z);
     },
     shoot(name, strength = 12, dir = { x: 0, y: 0, z: -1 }) {
       const rb = human.body(name);
-      human.hit(name, dir, strength, rb.translation());
+      const point = rb.translation();
+      human.hit(name, dir, strength, point);
+      blood.impact({
+        human,
+        part: name,
+        position: point,
+        direction: dir,
+        strength,
+        fatal: human.dead,
+      });
     },
     snapshot() {
       return {
@@ -344,6 +382,7 @@ if (new URLSearchParams(location.search).has("test"))
         step: { ...human.step },
         metrics: { ...human.metrics },
         injury: { ...human.injury },
+        blood: blood.stats(),
         reaction: human.reaction
           ? {
               age: human.reaction.age,
