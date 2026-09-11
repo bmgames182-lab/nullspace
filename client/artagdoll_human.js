@@ -188,6 +188,13 @@ export class ArtagdollHuman extends ActiveHuman {
     this.reaction.dir.copy(direction);
     this.reaction.point.copy(hitPoint);
 
+    // Strong side impacts must be solved with a visible lateral catch step,
+    // not hidden ankle torque. Step in the direction the torso was driven.
+    if (family === "torso" && strength >= 10 && Math.abs(direction.x) > 0.35) {
+      this.forcedStepSide = direction.x > 0 ? "R" : "L";
+      this.forcedStepAge = 0;
+    }
+
     if (family === "leg" && side) {
       this.injury[side] = clamp(this.injury[side] + strength / 120, 0, 1);
       this.reaction.legStun[side] = clamp(
