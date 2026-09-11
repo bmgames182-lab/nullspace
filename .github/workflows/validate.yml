@@ -23,11 +23,17 @@ jobs:
           node --check client/combat_plus.js
           node --check client/playground.js
           node --check client/input_guard.js
-      - name: Verify playground entrypoint
+          node --check client/camera_stability.js
+          node --check client/active_ragdoll_plus.js
+          node --check client/warzone.js
+      - name: Verify warzone entrypoint
         run: |
           grep -q 'GHOSTCAM' client/index.html
-          grep -q 'RAGDOLL PLAYGROUND' client/index.html
+          grep -q 'LIVE WARZONE' client/index.html
           grep -q './playground.js' client/index.html
+          grep -q './active_ragdoll_plus.js' client/index.html
+          grep -q './camera_stability.js' client/index.html
+          grep -q './warzone.js' client/index.html
           grep -q './game.js' client/index.html
           test ! -e worker/src/index.ts
       - name: Guard movement collision regression
@@ -39,3 +45,9 @@ jobs:
           # T-spawned/reset playground dummies live outside game.js soldiers[] and need their own tick.
           grep -Fq 's.__playgroundStandalone=true' client/playground.js
           grep -Fq 'if(s.__playgroundStandalone&&!s.__playgroundDisposed)s.update?.(dt,now)' client/playground.js
+      - name: Guard camera and active-ragdoll regression
+        run: |
+          grep -Fq 'look.z=0' client/camera_stability.js
+          grep -Fq 'Math.PI/2-.07' client/camera_stability.js
+          grep -Fq '__ghostcamActivePlus' client/active_ragdoll_plus.js
+          grep -Fq 'LIVE WAR // AI ENGAGED' client/warzone.js
