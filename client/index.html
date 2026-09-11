@@ -19,7 +19,7 @@
 <body>
   <div id="boot" class="overlay">
     <div class="boot-card">
-      <div class="eyebrow">BODYCAM PHYSICS SANDBOX // BUILD 004</div>
+      <div class="eyebrow">BODYCAM PHYSICS SANDBOX // BUILD 005</div>
       <h1>GHOST<span>CAM</span></h1>
       <p>Bodycam-style ragdoll playground. Spawn passive test dummies, shoot individual limbs, knock bodies down, drag them around and blast the scene with physics.</p>
       <button id="deployBtn" class="primary">ENTER RAGDOLL PLAYGROUND</button>
@@ -62,7 +62,7 @@
     <div id="feed"></div>
     <div class="vitals"><span>BODY</span><b id="hp">100</b><small id="statusText">SANDBOX ACTIVE</small></div>
     <div class="ammo"><b id="ammo">30</b><span>/</span><b id="reserve">120</b><small>5.56×45</small></div>
-    <div class="help">T SPAWN · K FLOP · J FLOP ALL · E DRAG · Q SHOVE · Y STAND · DEL REMOVE · H RESET · G FRAG</div>
+    <div class="help">WASD MOVE · SHIFT SPRINT · CTRL CROUCH · LMB FIRE · RMB AIM · T SPAWN · K FLOP · J FLOP ALL · E DRAG · Q SHOVE · Y RECOVER · DEL REMOVE · H RESET · G FRAG</div>
     <div id="deathCard" hidden><b>BODYCAM SIGNAL LOST</b><span>Press SPACE to redeploy</span></div>
   </div>
 
@@ -71,5 +71,6 @@
   <script type="module" src="./combat_plus.js"></script>
   <script type="module" src="./playground.js"></script>
   <script type="module" src="./game.js"></script>
+  <script type="module" src="./input_guard.js"></script>
 </body>
 </html>
