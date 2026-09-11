@@ -21,10 +21,11 @@ jobs:
           node --check client/ragdoll.js
           node --check client/soldier_skin.js
           node --check client/combat_plus.js
-      - name: Verify reset entrypoint
+          node --check client/playground.js
+      - name: Verify playground entrypoint
         run: |
           grep -q 'GHOSTCAM' client/index.html
-          grep -q './soldier_skin.js' client/index.html
-          grep -q './combat_plus.js' client/index.html
+          grep -q 'RAGDOLL PLAYGROUND' client/index.html
+          grep -q './playground.js' client/index.html
           grep -q './game.js' client/index.html
           test ! -e worker/src/index.ts
