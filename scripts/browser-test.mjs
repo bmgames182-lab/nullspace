@@ -40,9 +40,29 @@ try {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  const consoleErrors = [];
+  const requestFailures = [];
+  page.on("pageerror", (error) => errors.push(error.stack || error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("requestfailed", (request) => {
+    requestFailures.push(`${request.url()} :: ${request.failure()?.errorText ?? "failed"}`);
+  });
   await page.goto("http://127.0.0.1:8001/?test");
-  await page.waitForFunction(() => window.lab?.human);
+  try {
+    await page.waitForFunction(() => window.lab?.human, undefined, { timeout: 6000 });
+  } catch (error) {
+    const startup = {
+      pageErrors: errors,
+      consoleErrors,
+      requestFailures,
+      html: (await page.locator("body").innerText()).slice(0, 3000),
+    };
+    await writeFile(new URL("browser-startup-error.json", artifacts), JSON.stringify(startup, null, 2));
+    console.error("CLEAN RUNTIME STARTUP FAILURE", JSON.stringify(startup, null, 2));
+    throw error;
+  }
 
   // Exact body targeting, while ordinary gameplay retains normal spread RNG.
   await page.evaluate(() => {
@@ -103,7 +123,6 @@ try {
     });
   }
 
-  // Blood persists when the human is reset, while K remains a full room cleanup.
   const beforeCleanup = await page.evaluate(() => lab.bloodStats());
   assert.ok(beforeCleanup.effects > 0, "blood should persist across human resets");
   await page.keyboard.press("k");
@@ -118,7 +137,6 @@ try {
     lab.advance(2.4);
   });
 
-  // Camera/weapon presentation remains real-time even while deterministic physics is paused.
   await page.mouse.down({ button: "right" });
   await page.waitForTimeout(400);
   assert.ok(await page.evaluate(() => lab.camera.fov < 70), "ADS should narrow FOV");
@@ -137,9 +155,11 @@ try {
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.pointerLockElement);
   assert.deepEqual(errors, []);
+  assert.deepEqual(consoleErrors, []);
+  assert.deepEqual(requestFailures, []);
   await writeFile(
     new URL("browser.json", artifacts),
-    JSON.stringify({ errors, records, beforeCleanup }, null, 2),
+    JSON.stringify({ errors, consoleErrors, requestFailures, records, beforeCleanup }, null, 2),
   );
   console.log(
     "Browser passed: clean EuphoriaHuman runtime, real pointer-lock raycasts, exact 240 Hz reactions, persistent blood FX, cleanup, ADS, movement, reset and ESC.",
