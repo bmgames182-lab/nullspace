@@ -87,7 +87,20 @@ try {
       lab.pausePhysics(true);
       lab.advance(2.4);
     });
-    await page.evaluate((part) => lab.aimAt(part), name);
+    await page.evaluate((part) => {
+      const p = lab.human.body(part).translation();
+      // Shoot along the target's own horizontal depth line. A centre-to-centre
+      // view from the default player camera can legitimately cross a nearer
+      // thigh/arm after the fully physical body has settled into a slight lean.
+      // This keeps the test a real Rapier raycast while removing that occlusion
+      // ambiguity from exact-part assertions.
+      lab.setView(
+        { x: p.x, y: p.y, z: p.z + 2.8 },
+        { x: p.x, y: p.y, z: p.z },
+        50,
+      );
+      lab.aimAt(part);
+    }, name);
 
     const aimDot = await page.evaluate((part) => {
       const p = lab.human.body(part).translation();
