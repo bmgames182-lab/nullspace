@@ -26,11 +26,30 @@ function advance(f, seconds, sample) {
     }
   }
 }
-function settle(f) { advance(f, 2.4); assert.ok(f.h.body("pelvis").translation().y > 0.78, `pelvis=${f.h.body("pelvis").translation().y}`); }
+function assertUprightPosture(h, label = "human") {
+  const pelvis = h.body("pelvis").translation();
+  const abdomen = h.body("abdomen").translation();
+  const chest = h.body("chest").translation();
+  const head = h.body("head").translation();
+  assert.ok(pelvis.y > 0.76, `${label}: pelvis too low (${pelvis.y.toFixed(3)})`);
+  assert.ok(abdomen.y > pelvis.y + 0.12, `${label}: abdomen folded below pelvis (${abdomen.y.toFixed(3)} vs ${pelvis.y.toFixed(3)})`);
+  assert.ok(chest.y > pelvis.y + 0.34, `${label}: chest folded down (${chest.y.toFixed(3)} vs pelvis ${pelvis.y.toFixed(3)})`);
+  assert.ok(chest.y > abdomen.y + 0.12, `${label}: upper spine folded (${chest.y.toFixed(3)} vs abdomen ${abdomen.y.toFixed(3)})`);
+  assert.ok(head.y > chest.y + 0.2, `${label}: head not anatomically above chest (${head.y.toFixed(3)} vs ${chest.y.toFixed(3)})`);
+}
+function settle(f) { advance(f, 2.4); assertUprightPosture(f.h, "settled human"); }
 function disturb(f, part, impulse, offset = { x: 0, y: 0, z: 0 }) { const rb = f.h.body(part), p = vec(rb.translation()).add(new THREE.Vector3(offset.x, offset.y, offset.z)); rb.applyImpulseAtPoint(impulse, p, true); }
 
- test("clean human stands for 30 seconds with a real support polygon", () => {
-  const f = fixture(); try { let max = 0; advance(f, 30, (h) => { const p = h.body("pelvis").linvel(); max = Math.max(max, Math.hypot(p.x,p.y,p.z)); }); assert.ok(f.h.body("pelvis").translation().y > 0.8); assert.equal(f.h.passiveHandoff, false); assert.ok(f.h.balanceSnapshot().supportPolygon.length >= 4); assert.ok(max < 1.4, `idle chatter ${max.toFixed(2)}`); } finally { f.world.free(); }
+test("clean human stands anatomically upright for 30 seconds with a real support polygon", () => {
+  const f = fixture(); try {
+    let max = 0;
+    advance(f, 30, (h) => { const p = h.body("pelvis").linvel(); max = Math.max(max, Math.hypot(p.x,p.y,p.z)); });
+    assertUprightPosture(f.h, "30 s idle human");
+    assert.equal(f.h.passiveHandoff, false);
+    assert.ok(f.h.balanceSnapshot().supportPolygon.length >= 4);
+    assert.ok(max < 1.4, `idle chatter ${max.toFixed(2)}`);
+    assert.ok(f.h.metrics.steps <= 3, `idle human should not pace to stay alive (${f.h.metrics.steps} recovery steps)`);
+  } finally { f.world.free(); }
 });
 
 test("chest shot is local first, not impact-frame ragdoll", () => {
