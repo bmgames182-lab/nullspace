@@ -150,17 +150,21 @@ export class BiologicalArtagdollHumanV7 extends BiologicalArtagdollHuman {
       .add(v(rb.translation()));
   }
 
-  pullHandTo(handName, anchorName, goal, strength, dt) {
+  // The wound is a target only. Reaching force reacts against the helper arm,
+  // not against the injured body part. This avoids the unphysical "tractor
+  // beam" failure where raising both hands toward the head pulled the head down.
+  pullHandTo(handName, goal, strength, dt) {
     const hand = this.body(handName);
-    const anchor = this.body(anchorName) || this.body("chest");
+    const side = handName.endsWith("L") ? "L" : "R";
+    const anchor = this.body("upperArm" + side) || this.body("chest");
     if (!hand || !anchor) return;
     const relativeVelocity = v(hand.linvel()).sub(v(anchor.linvel()));
     const force = goal
       .clone()
       .sub(v(hand.translation()))
-      .multiplyScalar(115 + strength * 85)
-      .addScaledVector(relativeVelocity, -(12 + strength * 6));
-    this.forcePair(hand, anchor, force, 58 + strength * 44, dt);
+      .multiplyScalar(92 + strength * 62)
+      .addScaledVector(relativeVelocity, -(10 + strength * 4));
+    this.forcePair(hand, anchor, force, 44 + strength * 34, dt);
   }
 
   applyGuarding(dt) {
@@ -181,8 +185,8 @@ export class BiologicalArtagdollHumanV7 extends BiologicalArtagdollHuman {
     if (family === "torso") {
       const leftGoal = wound.clone().add(new THREE.Vector3(-0.045, -0.015 + tremor, 0.055));
       const rightGoal = wound.clone().add(new THREE.Vector3(0.045, 0.02 - tremor, 0.065));
-      this.pullHandTo("handL", this.guardWound.part, leftGoal, intensity, dt);
-      this.pullHandTo("handR", this.guardWound.part, rightGoal, intensity, dt);
+      this.pullHandTo("handL", leftGoal, intensity, dt);
+      this.pullHandTo("handR", rightGoal, intensity, dt);
 
       const curl = clamp(0.06 + intensity * 0.16, 0.06, 0.24);
       this.cohere(
@@ -207,27 +211,38 @@ export class BiologicalArtagdollHumanV7 extends BiologicalArtagdollHuman {
       );
     } else if (family === "head") {
       const hp = v(this.body("head").translation());
+      // One hand protects first while the other remains available for balance.
+      // The second hand joins only after the body has regained secure support.
+      const primary = this.guardWound.localPoint.x < -0.015 ? "L" : "R";
+      const secondary = primary === "L" ? "R" : "L";
+      const primarySign = primary === "L" ? -1 : 1;
+      const secondarySign = -primarySign;
       this.pullHandTo(
-        "handL",
-        "head",
-        hp.clone().add(new THREE.Vector3(-0.12, 0.015 + tremor, 0.03)),
-        intensity * 0.82,
+        "hand" + primary,
+        hp.clone().add(new THREE.Vector3(primarySign * 0.12, 0.015 + tremor, 0.03)),
+        intensity * 0.62,
         dt,
       );
-      this.pullHandTo(
-        "handR",
-        "head",
-        hp.clone().add(new THREE.Vector3(0.12, 0.015 - tremor, 0.03)),
-        intensity * 0.82,
-        dt,
-      );
+      const safelySupported =
+        b.phaseAge > 0.72 &&
+        this.support > 0.72 &&
+        !["brace", "collapse", "down"].includes(this.state) &&
+        pelvisPos.y > 0.76;
+      if (safelySupported) {
+        this.pullHandTo(
+          "hand" + secondary,
+          hp.clone().add(new THREE.Vector3(secondarySign * 0.12, 0.015 - tremor, 0.03)),
+          intensity * 0.46,
+          dt,
+        );
+      }
     } else if (family === "arm") {
       const injuredSide = this.guardWound.side || "R";
       const helperSide = injuredSide === "L" ? "R" : "L";
       const goal = v(this.body(this.guardWound.part).translation()).add(
         new THREE.Vector3(0, -0.03 + tremor, 0.04),
       );
-      this.pullHandTo("hand" + helperSide, this.guardWound.part, goal, intensity, dt);
+      this.pullHandTo("hand" + helperSide, goal, intensity, dt);
     } else if (family === "leg") {
       // Preserve the arms for balance while upright; reach for the injured leg
       // once already crouched/bracing/kneeling.
@@ -241,38 +256,43 @@ export class BiologicalArtagdollHumanV7 extends BiologicalArtagdollHuman {
         );
         this.pullHandTo(
           "hand" + (this.guardWound.side || "L"),
-          this.guardWound.part,
           goal,
-          intensity * 0.75,
+          intensity * 0.62,
           dt,
         );
       }
     }
 
     // Shoulder/elbow protection makes the intention legible while the physical
-    // hands are still travelling to the wound.
+    // hands are still travelling to the wound. During head guarding keep this
+    // asymmetric so one arm remains useful for balance.
     if (family === "torso" || family === "head") {
       for (const side of ["L", "R"]) {
         const sign = side === "L" ? -1 : 1;
+        const isHeadBalanceArm =
+          family === "head" &&
+          side !== (this.guardWound.localPoint.x < -0.015 ? "L" : "R") &&
+          !(b.phaseAge > 0.72 && this.support > 0.72 && pelvisPos.y > 0.76);
+        if (isHeadBalanceArm) continue;
         const upper = new THREE.Quaternion().setFromEuler(
           new THREE.Euler(
-            -0.32 - intensity * 0.13,
+            -0.3 - intensity * 0.1,
             0,
-            sign * (0.16 + intensity * 0.1),
+            sign * (0.15 + intensity * 0.08),
           ),
         );
         const lower = new THREE.Quaternion().setFromEuler(
-          new THREE.Euler(-0.66 - intensity * 0.22, 0, 0),
+          new THREE.Euler(-0.6 - intensity * 0.18, 0, 0),
         );
-        this.cohere(chest, this.body("upperArm" + side), upper, 26, 3, 17, 0.44, dt);
+        this.cohere(chest, this.body("upperArm" + side), upper, 24, 3, 16, 0.4, dt);
         this.cohere(
           this.body("upperArm" + side),
           this.body("lowerArm" + side),
           lower,
-          22,
+          20,
           2.4,
-          14,
-          0.46,
+          13,
+          0.42,
           dt,
         );
       }
