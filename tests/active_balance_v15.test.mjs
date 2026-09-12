@@ -45,7 +45,7 @@ test("live controller emergency balance states actually unlatch back to stable",
   }
 });
 
-test("live controller recovers from three light chest hits without a stale scramble collapse", () => {
+test("three rapid light chest hits escalate to conscious panic rather than a dead-looking floor ragdoll", () => {
   const f = fixture();
   try {
     advance(f, 2.2);
@@ -54,12 +54,31 @@ test("live controller recovers from three light chest hits without a stale scram
       f.h.hit("chest", { x: 0, y: 0, z: -1 }, 8, chest.translation());
       advance(f, 0.14);
     }
+
+    const escalated = f.h.traumaSnapshot?.();
+    assert.equal(escalated?.mode, "panic", "rapid repeated chest trauma should escalate behaviorally");
+    assert.ok((escalated?.rapidTorsoHits ?? 0) >= 3, "the three hits should be treated as one cumulative episode");
+
     advance(f, 4.0);
+    const trauma = f.h.traumaSnapshot?.();
+    const pelvisY = f.h.body("pelvis").translation().y;
+    const onFloor = ["down", "collapse"].includes(f.h.state) || pelvisY < 0.7;
+
+    assert.equal(f.h.dead, false);
     assert.equal(f.h.physiology.unconscious, false);
-    assert.equal(f.h.passiveHandoff, false);
-    assert.ok(!["collapse", "down", "limp"].includes(f.h.state), `light hits ended in ${f.h.state}`);
-    assert.ok(f.h.body("pelvis").translation().y > 0.7, `pelvis should recover (${f.h.body("pelvis").translation().y.toFixed(3)})`);
-    assert.equal(f.h.balanceSnapshot().state, "stable");
+    assert.equal(f.h.passiveHandoff, false, "conscious panic must happen before passive ragdoll handoff");
+    assert.ok(f.h.controlDrive() > 0.14, "a conscious floor reaction must retain muscle tone");
+
+    if (onFloor) {
+      assert.equal(trauma?.mode, "panic");
+      assert.ok(
+        trauma?.groundActive || trauma?.reactionPhase === "groundPanic" || trauma?.behaviorPhase === "groundGuard",
+        `a fall must become active ground coping, not inert down (state=${f.h.state}, phase=${trauma?.reactionPhase})`,
+      );
+    } else {
+      assert.ok(pelvisY > 0.7, `a saved recovery should remain genuinely upright (${pelvisY.toFixed(3)})`);
+      assert.ok(!["limp", "collapse"].includes(f.h.state));
+    }
   } finally {
     f.h.destroy();
     f.world.free();
