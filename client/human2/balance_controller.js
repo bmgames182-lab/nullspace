@@ -163,8 +163,15 @@ export class BalanceController {
   maybeRequestStep() {
     const h = this.h;
     if (h.hitAge < 0.095) return false;
-    if (!["recovering", "stumbling", "critical"].includes(this.state) || h.step.phase !== "idle" || h.step.cooldown > 0 || h.body("pelvis").translation().y < 0.59) return false;
-    if (Math.max(Math.max(0, this.outside) * 3, this.risk - 0.24, this.speed * 0.18) < 0.16) return false;
+    const normalStepState = ["recovering", "stumbling", "critical"].includes(this.state);
+    const outside = Math.max(0, Number.isFinite(this.outside) ? this.outside : 0);
+    const disturbedNeedsStep = this.state === "disturbed" && (
+      outside > 0.012 ||
+      (this.speed > 0.22 && this.disturbanceRisk > 0.12)
+    );
+    if (!(normalStepState || disturbedNeedsStep) || h.step.phase !== "idle" || h.step.cooldown > 0 || h.body("pelvis").translation().y < 0.59) return false;
+    const demand = Math.max(outside * 3, (this.risk - 0.18) * 0.9, this.speed * 0.32, this.disturbanceRisk * 0.65);
+    if (demand < 0.12) return false;
     const choice = this.chooseStep(); if (!choice) return false;
     this.recoveryFoot = choice.side; this.stepTarget = choice.target.clone();
     return h.startRecoveryStep(choice.target, choice.side, choice.urgency);
