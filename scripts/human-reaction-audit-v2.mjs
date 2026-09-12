@@ -25,6 +25,9 @@ async function reset(page) {
   await page.evaluate(() => { lab.clearBlood(); lab.reset(); });
   await waitStanding(page);
   await page.evaluate(() => {
+    // This audit deliberately exercises the panic branch. The general visual
+    // audit still covers the normal deterministic calm single-shot response.
+    lab.human.setReactionModeForDebug?.("panic");
     const chest = lab.human.body("chest").translation();
     lab.camera.position.set(2.05, 1.45, 2.65);
     lab.camera.fov = 43;
