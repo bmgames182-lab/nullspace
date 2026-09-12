@@ -2,17 +2,16 @@
 
 ## Trauma voice samples
 
-The optional runtime pain audio in `client/pain_audio.js` references three files from the public-domain section of `jonjonsson/SoundMonster`:
+`client/pain_audio.js` streams four public-domain / CC0 voice files from Wikimedia Commons at runtime. They are not vendored into this repository.
 
-- `Public domain/shock gasp.mp3`
-- `Public domain/scream pain man 2.mp3`
-- `Public domain/scream pain man 3.mp3`
+- `Nl-scream.ogg` — short scream, CC0 1.0 Universal. Source page: `https://commons.wikimedia.org/wiki/File:Nl-scream.ogg`
+- `En-us-scream.ogg` — short scream, released to the public domain by the copyright holder. Source page: `https://commons.wikimedia.org/wiki/File:En-us-scream.ogg`
+- `UncleSigmund - ahhh (cc0) (freesound).mp3` — scream, CC0 1.0 Universal. Source page: `https://commons.wikimedia.org/wiki/File:UncleSigmund_-_ahhh_(cc0)_(freesound).mp3`
+- `Male pain grunts.ogg` — male pain vocalisations. Source page: `https://commons.wikimedia.org/wiki/File:Male_pain_grunts.ogg`
 
-Source repository: `https://github.com/jonjonsson/SoundMonster`
+The runtime uses Wikimedia's `Special:Redirect/file/...` URLs so the source remains auditable while Commons can serve the canonical media object. Automated `?test` runs disable trauma voice playback entirely, so CI does not depend on external audio availability.
 
-The upstream repository places these files in its **Public domain** collection and identifies them as public-domain / CC0-style reusable sound effects. They are streamed from the upstream raw GitHub URLs at runtime; no upstream binary is vendored into this repository.
-
-The game has a WebAudio-generated fallback transient if an optional remote sample cannot load. Automated `?test` runs disable trauma voice playback entirely so CI never depends on an external network resource.
+The audio system has a WebAudio-generated fallback transient if a remote file cannot load. The fallback is intentionally non-speech and is only there so a network failure does not silently remove all pain feedback.
 
 ## Blood visuals
 
