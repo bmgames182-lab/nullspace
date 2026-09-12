@@ -16,24 +16,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Check syntax and simulate active ragdoll
+      - name: Check clean active-ragdoll stack and physics regressions
         run: npm run check
-      - name: Run sixteen-scenario whole-body balance audit
+      - name: Run sixteen-scenario clean whole-body balance audit
         run: npm run audit:balance
-      - name: Verify focused entrypoint
+      - name: Verify clean playable entrypoint
         run: |
           grep -Fq 'ACTIVE BODY LAB' client/index.html
-          grep -Fq './euphoria_lab.js' client/index.html
+          grep -Fq './euphoria_lab_v2.js' client/index.html
+          grep -Fq 'EuphoriaHuman' client/euphoria_lab_v2.js
           grep -Fq 'ONE HUMAN' client/index.html
           grep -Fq 'ONE WEAPON' client/index.html
           ! grep -Eq './(game|warzone|combat_plus).js' client/index.html
       - name: Install browser
         run: npx playwright install --with-deps chromium
-      - name: Exercise FPS, blood FX, and targeted body hits in browser
+      - name: Exercise clean FPS runtime, blood FX, and exact targeted hits
         run: npm run test:browser
-      - name: Capture deterministic visual physics audit
+      - name: Capture deterministic clean-controller visual audit
         run: npm run audit:visual
-      - name: Capture full human chest reaction sequence
+      - name: Capture reference-style chest reaction sequence
         run: npm run audit:human
       - uses: actions/upload-artifact@v4
         if: always()
