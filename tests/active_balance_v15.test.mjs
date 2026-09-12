@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
-import { BiologicalArtagdollHumanV15 } from "../client/biological_human_v15.js";
+import { BiologicalArtagdollHumanV6 } from "../client/biological_human_v6.js";
 
 await RAPIER.init();
 const DT = 1 / 240;
@@ -16,7 +16,7 @@ function fixture() {
       .setTranslation(0, -0.1, 0)
       .setFriction(1),
   );
-  return { world, h: new BiologicalArtagdollHumanV15(world, new THREE.Scene()) };
+  return { world, h: new BiologicalArtagdollHumanV6(world, new THREE.Scene()) };
 }
 
 function advance(f, seconds) {
@@ -26,7 +26,7 @@ function advance(f, seconds) {
   }
 }
 
-test("V15 emergency balance states actually unlatch back to stable", () => {
+test("live controller emergency balance states actually unlatch back to stable", () => {
   const f = fixture();
   try {
     advance(f, 2.2);
@@ -40,11 +40,12 @@ test("V15 emergency balance states actually unlatch back to stable", () => {
     assert.equal(b.state, "stable", `low-risk body must leave emergency state (candidate=${b.transitionCandidate})`);
     assert.ok(f.h.body("pelvis").translation().y > 0.72);
   } finally {
+    f.h.destroy();
     f.world.free();
   }
 });
 
-test("three light chest hits recover instead of inheriting a stale scramble state", () => {
+test("live controller recovers from three light chest hits without a stale scramble collapse", () => {
   const f = fixture();
   try {
     advance(f, 2.2);
@@ -60,6 +61,7 @@ test("three light chest hits recover instead of inheriting a stale scramble stat
     assert.ok(f.h.body("pelvis").translation().y > 0.7, `pelvis should recover (${f.h.body("pelvis").translation().y.toFixed(3)})`);
     assert.equal(f.h.balanceSnapshot().state, "stable");
   } finally {
+    f.h.destroy();
     f.world.free();
   }
 });
