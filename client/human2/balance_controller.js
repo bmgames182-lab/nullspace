@@ -67,6 +67,16 @@ export class BalanceController {
     this.disturbanceRisk = Math.max(this.disturbanceRisk, clamp(amount, 0, 1.15));
   }
 
+  // Reference footage shows a short neuromuscular delay: the struck segment
+  // yields first while the stance continues carrying body weight.  Keep the
+  // vertical support immediately, but ramp gross horizontal/rotational balance
+  // authority in only after the local response has had ~100 ms to develop.
+  reactionAuthority() {
+    const age = this.h.hitAge ?? 99;
+    if (age >= 0.12) return 1;
+    return smooth((age - 0.045) / 0.075);
+  }
+
   updateFootAnchors() {
     for (const side of ["L", "R"]) {
       const foot = this.h.body("foot" + side), quality = this.h.footQuality(foot), data = this.h.feet[side];
@@ -152,6 +162,7 @@ export class BalanceController {
 
   maybeRequestStep() {
     const h = this.h;
+    if (h.hitAge < 0.095) return false;
     if (!["recovering", "stumbling", "critical"].includes(this.state) || h.step.phase !== "idle" || h.step.cooldown > 0 || h.body("pelvis").translation().y < 0.59) return false;
     if (Math.max(Math.max(0, this.outside) * 3, this.risk - 0.24, this.speed * 0.18) < 0.16) return false;
     const choice = this.chooseStep(); if (!choice) return false;
@@ -161,27 +172,40 @@ export class BalanceController {
 
   applySupport(dt) {
     const h = this.h; if (["passive", "downed"].includes(this.state)) return;
+    const grossAuthority = 0.1 + 0.9 * this.reactionAuthority();
     const pelvis = h.body("pelvis"), pp = v(pelvis.translation()), pv = v(pelvis.linvel()), swing = h.step.phase !== "idle" ? h.step.side : null, drive = h.controlDrive(), supports = [];
     for (const side of ["L", "R"]) {
       const foot = h.body("foot" + side), data = h.feet[side]; if (side === swing || data.quality < 0.14) continue;
       const capacity = h.legCapacity(side); if (capacity < 0.08) continue; supports.push({ side, foot, data, capacity });
       const pos = v(foot.translation()), rel = v(foot.linvel()).sub(v(pelvis.linvel())), err = data.anchor.clone().sub(pos).setY(0), release = smooth((this.risk - 0.46) / 0.34);
-      const traction = err.multiplyScalar(175 * (1 - release)).addScaledVector(new THREE.Vector3(rel.x, 0, rel.z), -20 * (1 - release));
-      h.forcePair(foot, pelvis, traction, 64 * capacity * (1 - release) + 7, dt);
+      const traction = err.multiplyScalar(175 * (1 - release)).addScaledVector(new THREE.Vector3(rel.x, 0, rel.z), -20 * (1 - release)).multiplyScalar(grossAuthority);
+      h.forcePair(foot, pelvis, traction, (64 * capacity * (1 - release) + 7) * grossAuthority, dt);
       if (err.length() > 0.11 || release > 0.82) data.anchor.lerp(pos, clamp(dt * 7, 0, 1));
     }
     const total = supports.reduce((s, x) => s + x.data.quality * x.capacity, 0);
-    for (const s of supports) { if (total <= 1e-5) continue; const share = s.data.quality * s.capacity / total, targetHeight = 0.955 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 760 - pv.y * 105, -110, 540); const force = new THREE.Vector3(clamp((this.supportCenter.x - this.com.x) * 120 - this.comVelocity.x * 38, -88, 88), Math.max(0, (h.mass * 9.81 + hf) * share), clamp((this.supportCenter.z - this.com.z) * 120 - this.comVelocity.z * 38, -88, 88)).multiplyScalar(drive); h.forcePair(pelvis, s.foot, force, 820, dt); }
-    if (supports.length) { const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(48 + this.risk * 38).addScaledVector(v(pelvis.angvel()), -(9 + this.risk * 8)); for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), 62 + this.risk * 24, dt); }
+    for (const s of supports) {
+      if (total <= 1e-5) continue;
+      const share = s.data.quality * s.capacity / total, targetHeight = 0.955 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 760 - pv.y * 105, -110, 540);
+      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 120 - this.comVelocity.x * 38, -88, 88) * grossAuthority;
+      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 120 - this.comVelocity.z * 38, -88, 88) * grossAuthority;
+      const vertical = Math.max(0, (h.mass * 9.81 + hf) * share);
+      const force = new THREE.Vector3(horizontalX, vertical, horizontalZ).multiplyScalar(drive);
+      h.forcePair(pelvis, s.foot, force, 820, dt);
+    }
+    if (supports.length) {
+      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(48 + this.risk * 38).addScaledVector(v(pelvis.angvel()), -(9 + this.risk * 8)).multiplyScalar(grossAuthority);
+      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (62 + this.risk * 24) * grossAuthority, dt);
+    }
   }
 
   pose(targets) {
     const h = this.h; if (["passive", "downed"].includes(this.state)) return;
-    const inv = q(h.body("pelvis").rotation()).invert(), local = this.escape.clone().applyQuaternion(inv), risk = clamp(this.risk, 0, 1), knee = clamp(risk * 0.28 + Math.max(0, this.speed - 0.45) * 0.055, 0, 0.4);
-    targets.abdomen.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(local.z * (0.035 + risk * 0.16), -0.2, 0.2), clamp(-h.body("pelvis").angvel().y * 0.026, -0.14, 0.14), clamp(-local.x * (0.035 + risk * 0.13), -0.17, 0.17))));
-    targets.chest.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(-local.z * (0.035 + risk * 0.14), -0.18, 0.18), clamp(h.body("pelvis").angvel().y * 0.04, -0.18, 0.18), clamp(local.x * (0.035 + risk * 0.11), -0.15, 0.15))));
+    const authority = this.reactionAuthority();
+    const inv = q(h.body("pelvis").rotation()).invert(), local = this.escape.clone().applyQuaternion(inv), risk = clamp(this.risk, 0, 1) * authority, knee = clamp(risk * 0.28 + Math.max(0, this.speed - 0.45) * 0.055 * authority, 0, 0.4);
+    targets.abdomen.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(local.z * (0.035 + risk * 0.16) * authority, -0.2, 0.2), clamp(-h.body("pelvis").angvel().y * 0.026 * authority, -0.14, 0.14), clamp(-local.x * (0.035 + risk * 0.13) * authority, -0.17, 0.17))));
+    targets.chest.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(-local.z * (0.035 + risk * 0.14) * authority, -0.18, 0.18), clamp(h.body("pelvis").angvel().y * 0.04 * authority, -0.18, 0.18), clamp(local.x * (0.035 + risk * 0.11) * authority, -0.15, 0.15))));
     targets.head.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(local.z * risk * 0.05, -0.08, 0.08), 0, clamp(-local.x * risk * 0.06, -0.1, 0.1))));
-    for (const side of ["L", "R"]) { const sign = side === "L" ? -1 : 1; if (h.step.side !== side && h.feet[side].quality > 0.15) targets["shin" + side].multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(knee, 0, 0))); const independent = (side === "L" ? -0.028 : 0.036) * risk + Math.sin(h.age * (side === "L" ? 2.1 : 2.35) + sign) * 0.018 * risk; targets["upperArm" + side].multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(-local.z * (0.13 + risk * 0.3) - 0.045 * risk, -0.58, 0.32), clamp(sign * h.body("chest").angvel().y * -0.032, -0.17, 0.17), sign * (0.09 + risk * 0.31) + independent - local.x * 0.17))); }
+    for (const side of ["L", "R"]) { const sign = side === "L" ? -1 : 1; if (h.step.side !== side && h.feet[side].quality > 0.15) targets["shin" + side].multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(knee, 0, 0))); const independent = (side === "L" ? -0.028 : 0.036) * risk + Math.sin(h.age * (side === "L" ? 2.1 : 2.35) + sign) * 0.018 * risk; targets["upperArm" + side].multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp((-local.z * (0.13 + risk * 0.3) - 0.045 * risk) * authority, -0.58, 0.32), clamp(sign * h.body("chest").angvel().y * -0.032 * authority, -0.17, 0.17), (sign * (0.09 + risk * 0.31) + independent - local.x * 0.17) * authority))); }
   }
 
   muscleScale() { if (this.state === "passive") return 0.02; if (this.state === "downed") return 0.46; if (this.state === "falling") return clamp(0.92 - this.fallAge * 0.28, 0.38, 0.92); return 1; }
@@ -200,5 +224,5 @@ export class BalanceController {
     if (!this.debugEnabled) return; this.setupDebug(); const d = this.debug, points = this.supportHull.map((p) => new THREE.Vector3(p.x, p.y + 0.025, p.z));
     d.support.geometry.dispose(); d.support.geometry = new THREE.BufferGeometry().setFromPoints(points.length >= 2 ? points : [this.supportCenter, this.supportCenter.clone().add(new THREE.Vector3(0.001, 0, 0))]); d.com.position.copy(this.com); d.projection.position.copy(this.projectedCom).add(new THREE.Vector3(0, 0.025, 0)); d.capture.position.copy(this.capture).add(new THREE.Vector3(0, 0.035, 0)); if (this.stepTarget) d.target.position.copy(this.stepTarget).add(new THREE.Vector3(0, 0.035, 0)); else d.target.position.copy(this.supportCenter).setY(-5);
   }
-  snapshot() { return { state: this.state, stateAge: this.stateAge, risk: this.risk, geometricRisk: this.geometricRisk, disturbanceRisk: this.disturbanceRisk, supportCenter: { x: this.supportCenter.x, y: this.supportCenter.y, z: this.supportCenter.z }, supportPolygon: this.supportHull.map((p) => ({ x: p.x, y: p.y, z: p.z })), com: { x: this.com.x, y: this.com.y, z: this.com.z }, projectedCom: { x: this.projectedCom.x, y: this.projectedCom.y, z: this.projectedCom.z }, predictedCom: { x: this.capture.x, y: this.capture.y, z: this.capture.z }, velocity: { x: this.comVelocity.x, y: this.comVelocity.y, z: this.comVelocity.z }, recoveryFoot: this.recoveryFoot, stepTarget: this.stepTarget && { x: this.stepTarget.x, y: this.stepTarget.y, z: this.stepTarget.z }, muscleScale: this.muscleScale(), outside: this.outside, speed: this.speed, lean: this.lean, angular: this.angular }; }
+  snapshot() { return { state: this.state, stateAge: this.stateAge, risk: this.risk, geometricRisk: this.geometricRisk, disturbanceRisk: this.disturbanceRisk, reactionAuthority: this.reactionAuthority(), supportCenter: { x: this.supportCenter.x, y: this.supportCenter.y, z: this.supportCenter.z }, supportPolygon: this.supportHull.map((p) => ({ x: p.x, y: p.y, z: p.z })), com: { x: this.com.x, y: this.com.y, z: this.com.z }, projectedCom: { x: this.projectedCom.x, y: this.projectedCom.y, z: this.projectedCom.z }, predictedCom: { x: this.capture.x, y: this.capture.y, z: this.capture.z }, velocity: { x: this.comVelocity.x, y: this.comVelocity.y, z: this.comVelocity.z }, recoveryFoot: this.recoveryFoot, stepTarget: this.stepTarget && { x: this.stepTarget.x, y: this.stepTarget.y, z: this.stepTarget.z }, muscleScale: this.muscleScale(), outside: this.outside, speed: this.speed, lean: this.lean, angular: this.angular }; }
 }
