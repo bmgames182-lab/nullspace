@@ -68,9 +68,9 @@ export class BalanceController {
   }
 
   // Reference footage shows a short neuromuscular delay: the struck segment
-  // yields first while the stance continues carrying body weight.  Keep the
-  // vertical support immediately, but ramp gross horizontal/rotational balance
-  // authority in only after the local response has had ~100 ms to develop.
+  // yields first while the stance continues carrying body weight. Keep vertical
+  // support immediately, then ramp gross horizontal/rotational authority in
+  // after the local response has had roughly 100 ms to develop.
   reactionAuthority() {
     const age = this.h.hitAge ?? 99;
     if (age >= 0.12) return 1;
@@ -178,23 +178,26 @@ export class BalanceController {
       const foot = h.body("foot" + side), data = h.feet[side]; if (side === swing || data.quality < 0.14) continue;
       const capacity = h.legCapacity(side); if (capacity < 0.08) continue; supports.push({ side, foot, data, capacity });
       const pos = v(foot.translation()), rel = v(foot.linvel()).sub(v(pelvis.linvel())), err = data.anchor.clone().sub(pos).setY(0), release = smooth((this.risk - 0.46) / 0.34);
-      const traction = err.multiplyScalar(175 * (1 - release)).addScaledVector(new THREE.Vector3(rel.x, 0, rel.z), -20 * (1 - release)).multiplyScalar(grossAuthority);
-      h.forcePair(foot, pelvis, traction, (64 * capacity * (1 - release) + 7) * grossAuthority, dt);
+      const traction = err.multiplyScalar(240 * (1 - release)).addScaledVector(new THREE.Vector3(rel.x, 0, rel.z), -32 * (1 - release)).multiplyScalar(grossAuthority);
+      h.forcePair(foot, pelvis, traction, (92 * capacity * (1 - release) + 9) * grossAuthority, dt);
       if (err.length() > 0.11 || release > 0.82) data.anchor.lerp(pos, clamp(dt * 7, 0, 1));
     }
     const total = supports.reduce((s, x) => s + x.data.quality * x.capacity, 0);
     for (const s of supports) {
       if (total <= 1e-5) continue;
-      const share = s.data.quality * s.capacity / total, targetHeight = 0.955 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 760 - pv.y * 105, -110, 540);
-      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 120 - this.comVelocity.x * 38, -88, 88) * grossAuthority;
-      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 120 - this.comVelocity.z * 38, -88, 88) * grossAuthority;
+      const share = s.data.quality * s.capacity / total, targetHeight = 0.97 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 900 - pv.y * 140, -130, 580);
+      // This is a ground-reaction controller for the whole 76 kg articulated
+      // body. Distribute the requested horizontal reaction across the support
+      // feet instead of accidentally changing gain with the number of contacts.
+      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 1450 - this.comVelocity.x * 330, -240, 240) * grossAuthority * share;
+      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 1450 - this.comVelocity.z * 330, -240, 240) * grossAuthority * share;
       const vertical = Math.max(0, (h.mass * 9.81 + hf) * share);
       const force = new THREE.Vector3(horizontalX, vertical, horizontalZ).multiplyScalar(drive);
-      h.forcePair(pelvis, s.foot, force, 820, dt);
+      h.forcePair(pelvis, s.foot, force, 900, dt);
     }
     if (supports.length) {
-      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(48 + this.risk * 38).addScaledVector(v(pelvis.angvel()), -(9 + this.risk * 8)).multiplyScalar(grossAuthority);
-      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (62 + this.risk * 24) * grossAuthority, dt);
+      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(430 + this.risk * 110).addScaledVector(v(pelvis.angvel()), -(58 + this.risk * 24)).multiplyScalar(grossAuthority);
+      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (185 + this.risk * 45) * grossAuthority, dt);
     }
   }
 
