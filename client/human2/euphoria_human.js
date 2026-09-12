@@ -25,9 +25,9 @@ const MOTOR_JOINTS = [
 ];
 const Y = new THREE.Vector3(0, 1, 0);
 const SOFT_LIMITS = [
-  ["pelvis", "abdomen", { axis: Y, swingMax: 0.5, twistMin: -0.34, twistMax: 0.34, kp: 58, kd: 6.5, maxTorque: 40 }],
-  ["abdomen", "chest", { axis: Y, swingMax: 0.48, twistMin: -0.4, twistMax: 0.4, kp: 54, kd: 6.2, maxTorque: 38 }],
-  ["chest", "head", { axis: Y, swingMax: 0.68, twistMin: -0.78, twistMax: 0.78, kp: 20, kd: 3.1, maxTorque: 16 }],
+  ["pelvis", "abdomen", { axis: Y, swingMax: 0.5, twistMin: -0.34, twistMax: 0.34, kp: 170, kd: 16, maxTorque: 120 }],
+  ["abdomen", "chest", { axis: Y, swingMax: 0.48, twistMin: -0.4, twistMax: 0.4, kp: 150, kd: 14, maxTorque: 100 }],
+  ["chest", "head", { axis: Y, swingMax: 0.68, twistMin: -0.78, twistMax: 0.78, kp: 30, kd: 4, maxTorque: 22 }],
   ["chest", "upperArmL", { axis: Y, swingMax: 1.72, twistMin: -1.05, twistMax: 1.05, kp: 24, kd: 3.5, maxTorque: 20 }],
   ["chest", "upperArmR", { axis: Y, swingMax: 1.72, twistMin: -1.05, twistMax: 1.05, kp: 24, kd: 3.5, maxTorque: 20 }],
   ["pelvis", "thighL", { axis: Y, swingMax: 1.36, twistMin: -0.58, twistMax: 0.58, kp: 62, kd: 7, maxTorque: 48 }],
@@ -85,8 +85,8 @@ export class EuphoriaHuman extends ActiveHuman {
   pullHandTo(side, point, strength, dt) {
     const hand = this.body("hand" + side), chest = this.body("chest"); if (!hand || !chest) return;
     const rel = v(hand.linvel()).sub(v(chest.linvel())), error = point.clone().sub(v(hand.translation())), distance = error.length();
-    const force = error.multiplyScalar(62 + strength * 48).addScaledVector(rel, -(8 + strength * 7)); const capacity = this.armCapacity(side) * this.reactions.motorScale("hand" + side);
-    this.forcePair(hand, chest, force, (42 + strength * 55) * Math.max(0.18, capacity), dt); if (distance > 0.95) this.forcePair(hand, chest, rel.clone().multiplyScalar(-12), 28, dt);
+    const force = error.multiplyScalar(100 + strength * 75).addScaledVector(rel, -(12 + strength * 10)); const capacity = this.armCapacity(side) * this.reactions.motorScale("hand" + side);
+    this.forcePair(hand, chest, force, (80 + strength * 95) * Math.max(0.18, capacity), dt); if (distance > 0.95) this.forcePair(hand, chest, rel.clone().multiplyScalar(-14), 34, dt);
   }
 
   hit(part, dir, strength = 12, point) {
