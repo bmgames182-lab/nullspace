@@ -72,9 +72,16 @@ export class MotorController {
 }
 
 export const MOTOR_PROFILES = Object.freeze({
-  spineLower: { kp: 58, kd: 7.5, maxTorque: 42, softSpeed: 4.3, hardSpeed: 9.2 },
-  spineUpper: { kp: 52, kd: 7.0, maxTorque: 38, softSpeed: 4.5, hardSpeed: 9.5 },
-  neck: { kp: 15, kd: 2.7, maxTorque: 12, softSpeed: 5.2, hardSpeed: 11.0 },
+  // The torso motors must support the actual upper-body mass, not merely rotate
+  // unloaded links. The previous 38-42 N m caps were below the gravitational
+  // moment of the articulated chest/head/arms once the spine leaned, so a tiny
+  // solver perturbation could become an unrecoverable jack-knife while the
+  // pelvis remained at nominal standing height. These values still yield to
+  // explicit hit targets and motor inhibition, but have enough authority to
+  // maintain a neutral human posture under ordinary gravity.
+  spineLower: { kp: 210, kd: 18, maxTorque: 150, softSpeed: 4.3, hardSpeed: 9.2 },
+  spineUpper: { kp: 170, kd: 15, maxTorque: 120, softSpeed: 4.5, hardSpeed: 9.5 },
+  neck: { kp: 34, kd: 4.8, maxTorque: 24, softSpeed: 5.2, hardSpeed: 11.0 },
   hip: { kp: 62, kd: 7.2, maxTorque: 50, softSpeed: 5.0, hardSpeed: 10.2 },
   knee: { kp: 54, kd: 6.5, maxTorque: 44, softSpeed: 5.0, hardSpeed: 10.5 },
   ankle: { kp: 30, kd: 4.6, maxTorque: 24, softSpeed: 5.2, hardSpeed: 11.0 },
