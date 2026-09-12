@@ -2,7 +2,7 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { BiologicalArtagdollHumanV13 } from "../client/biological_human_v13.js";
+import { BiologicalArtagdollHumanV14 } from "../client/biological_human_v14.js";
 
 await RAPIER.init();
 const DT = 1 / 240;
@@ -19,7 +19,7 @@ function fixture() {
       .setTranslation(0, -0.1, 0)
       .setFriction(1),
   );
-  return { world, h: new BiologicalArtagdollHumanV13(world, new THREE.Scene()) };
+  return { world, h: new BiologicalArtagdollHumanV14(world, new THREE.Scene()) };
 }
 
 function impulse(h, part, xyz, offset = [0, 0, 0]) {
@@ -35,6 +35,7 @@ function telemetry(h) {
     state: h.state,
     balanceState: b?.state,
     risk: b?.risk ?? 0,
+    disturbanceRisk: b?.disturbanceRisk ?? 0,
     pelvisY: h.body("pelvis").translation().y,
     chestY: h.body("chest").translation().y,
     pelvisVelocity: h.body("pelvis").linvel(),
@@ -57,6 +58,7 @@ function simulate(f, seconds, stats) {
     const t = telemetry(f.h);
     stats.minPelvisY = Math.min(stats.minPelvisY, t.pelvisY);
     stats.maxRisk = Math.max(stats.maxRisk, t.risk);
+    stats.maxDisturbanceRisk = Math.max(stats.maxDisturbanceRisk, t.disturbanceRisk);
     stats.maxPelvisSpeed = Math.max(stats.maxPelvisSpeed, Math.hypot(t.pelvisVelocity.x, t.pelvisVelocity.y, t.pelvisVelocity.z));
     if (f.h.step.phase !== "idle") {
       const foot = f.h.body("foot" + f.h.step.side);
@@ -76,6 +78,7 @@ function freshStats(name) {
     name,
     minPelvisY: Infinity,
     maxRisk: 0,
+    maxDisturbanceRisk: 0,
     maxPelvisSpeed: 0,
     maxSwingFootSpeed: 0,
     startSteps: 0,
@@ -111,7 +114,7 @@ const scenarios = [
   ["08-pull-left-thigh", async ({ h }) => impulse(h, "thighL", [5.0, 0, 0])],
   ["09-pull-right-arm", async ({ h }) => impulse(h, "upperArmR", [4.8, 0, 0])],
   ["10-push-chest", async ({ h }) => impulse(h, "chest", [0, 0, -5.2], [0.08, 0.08, 0])],
-  ["11-push-during-step", async (f, stats) => {
+  ["11-push-during-step", async (f) => {
     impulse(f.h, "chest", [5.0, 0, 0]);
     for (let i = 0; i < Math.round(0.7 / DT); i++) {
       f.h.update(DT);
@@ -150,9 +153,6 @@ for (const [name, action, seconds = 3] of scenarios) {
   const result = await run(name, action, seconds);
   report.push(result);
 
-  // Guard rails, not choreography assertions: small disturbances must stay up;
-  // large disturbances may save themselves or fall, but cannot instantly become
-  // a passive/dead body simply because an external force was applied.
   if (/standing|small-/.test(name)) {
     assert.ok(result.final.pelvisY > 0.62, `${name}: tiny disturbance caused collapse`);
     assert.ok(!["collapse", "down", "limp"].includes(result.final.state), `${name}: tiny disturbance ended down`);
@@ -164,6 +164,6 @@ for (const [name, action, seconds = 3] of scenarios) {
 
 await writeFile(
   new URL("report.json", outDir),
-  JSON.stringify({ generatedAt: new Date().toISOString(), controller: "V13", scenarios: report }, null, 2),
+  JSON.stringify({ generatedAt: new Date().toISOString(), controller: "V14", scenarios: report }, null, 2),
 );
-console.log("Balance audit passed: 16 disturbance/fall scenarios simulated with bounded active-ragdoll recovery.");
+console.log("Balance audit passed: 16 disturbance/fall scenarios simulated with bounded V14 active-ragdoll recovery.");
