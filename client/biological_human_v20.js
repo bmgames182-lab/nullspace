@@ -5,9 +5,12 @@ const TORSO = /^(chest|abdomen|pelvis)$/;
 
 // V20 keeps repeated light torso hits painful and protective without allowing
 // their accumulated startle variable to keep the whole torso deliberately in a
-// panic sway. Real COM instability is still free to request capture steps and
-// all normal active-balance corrections; this only limits behavior-generated
-// destabilization for low-energy trauma.
+// panic sway. It also resolves an older/newer controller overlap: the legacy
+// Artagdoll state machine used to start an unrequested step merely because it
+// entered "scramble", while the newer COM/support-polygon controller separately
+// requested its own capture step. During weak torso trauma only the newer
+// controller (or an explicit side-specific request) is allowed to initiate the
+// rescue step, preventing harmless hits from becoming a chain of extra steps.
 export class BiologicalArtagdollHumanV20 extends BiologicalArtagdollHumanV19 {
   constructor(world, scene, x = 0, z = 0) {
     super(world, scene, x, z);
@@ -40,6 +43,21 @@ export class BiologicalArtagdollHumanV20 extends BiologicalArtagdollHumanV19 {
     return event;
   }
 
+  startScrambleStep(capture, requestedSide = null) {
+    const lightEpisode =
+      this.lightTorsoEpisodeAge < 4.8 &&
+      this.behavior?.family === "torso" &&
+      this.behavior?.lastStrength <= LIGHT_TORSO_MAX &&
+      !this.dead &&
+      !this.physiology?.unconscious;
+
+    // EuphoriaBalanceController always supplies the recovery side it selected.
+    // The old generic "scramble means take a step" path does not. Reject only
+    // that legacy unrequested path; real capture-point rescue remains untouched.
+    if (lightEpisode && !requestedSide) return false;
+    return super.startScrambleStep(capture, requestedSide);
+  }
+
   update(dt) {
     this.lightTorsoEpisodeAge += dt;
 
@@ -47,7 +65,7 @@ export class BiologicalArtagdollHumanV20 extends BiologicalArtagdollHumanV19 {
     // the acute startle window has passed it should not continuously re-enter a
     // behavior-driven panic sway. This is intentionally independent from the
     // balance controller: if the body is actually unstable, COM/capture-point
-    // logic can still produce stumble states and unlimited real rescue steps.
+    // logic can still produce stumble states and side-specific rescue steps.
     if (
       this.lightTorsoEpisodeAge < 4.8 &&
       this.behavior &&
