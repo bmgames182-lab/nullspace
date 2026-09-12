@@ -186,18 +186,17 @@ export class BalanceController {
     for (const s of supports) {
       if (total <= 1e-5) continue;
       const share = s.data.quality * s.capacity / total, targetHeight = 0.97 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 900 - pv.y * 140, -130, 580);
-      // This is a ground-reaction controller for the whole 76 kg articulated
-      // body. Distribute the requested horizontal reaction across the support
-      // feet instead of accidentally changing gain with the number of contacts.
-      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 1450 - this.comVelocity.x * 330, -240, 240) * grossAuthority * share;
-      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 1450 - this.comVelocity.z * 330, -240, 240) * grossAuthority * share;
+      // Enough ground reaction to stand as an inverted pendulum, but not enough
+      // to erase the displacement that should precede a capture step.
+      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 720 - this.comVelocity.x * 140, -200, 200) * grossAuthority * share;
+      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 720 - this.comVelocity.z * 140, -200, 200) * grossAuthority * share;
       const vertical = Math.max(0, (h.mass * 9.81 + hf) * share);
       const force = new THREE.Vector3(horizontalX, vertical, horizontalZ).multiplyScalar(drive);
       h.forcePair(pelvis, s.foot, force, 900, dt);
     }
     if (supports.length) {
-      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(430 + this.risk * 110).addScaledVector(v(pelvis.angvel()), -(58 + this.risk * 24)).multiplyScalar(grossAuthority);
-      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (185 + this.risk * 45) * grossAuthority, dt);
+      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(360 + this.risk * 95).addScaledVector(v(pelvis.angvel()), -(50 + this.risk * 20)).multiplyScalar(grossAuthority);
+      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (160 + this.risk * 38) * grossAuthority, dt);
     }
   }
 
