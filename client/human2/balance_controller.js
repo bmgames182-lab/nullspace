@@ -68,10 +68,6 @@ export class BalanceController {
     this.disturbanceRisk = Math.max(this.disturbanceRisk, clamp(amount, 0, 1.15));
   }
 
-  // Reference footage shows a short neuromuscular delay: the struck segment
-  // yields first while the stance continues carrying body weight. Keep vertical
-  // support immediately, then ramp gross horizontal/rotational authority in
-  // after the local response has had roughly 100 ms to develop.
   reactionAuthority() {
     const age = this.h.hitAge ?? 99;
     if (age >= 0.12) return 1;
@@ -95,10 +91,6 @@ export class BalanceController {
 
     if (this._velocityReady && this.h.age > 0.8) {
       const cd = chest.clone().sub(this._prevChest).setY(0), pd = pelvis.clone().sub(this._prevPelvis).setY(0), md = com.clone().sub(this._prevCom).setY(0);
-      // Active recovery generates large but expected segment accelerations. Treat
-      // those as self-motion for a short window around each step so the observer
-      // cannot recursively classify its own correction as a fresh shove. A truly
-      // large new impulse can still punch through the shield.
       const rawKick = Math.max(
         clamp((cd.length() - 0.1) / 0.55, 0, 1.05) * 0.7,
         clamp((pd.length() - 0.075) / 0.46, 0, 1.05) * 0.68,
@@ -184,11 +176,12 @@ export class BalanceController {
     if (h.hitAge < 0.095) return false;
     const normalStepState = ["recovering", "stumbling", "critical"].includes(this.state);
     const outside = Math.max(0, Number.isFinite(this.outside) ? this.outside : 0);
-    const disturbedNeedsStep = this.state === "disturbed" && (
+    const hasCaptureDemand = outside > 0.01 || this.speed > 0.2 || this.disturbanceRisk > 0.1;
+    const disturbedNeedsStep = this.state === "disturbed" && hasCaptureDemand && (
       outside > 0.012 ||
       (this.speed > 0.22 && this.disturbanceRisk > 0.12)
     );
-    if (!(normalStepState || disturbedNeedsStep) || h.step.phase !== "idle" || h.step.cooldown > 0 || h.body("pelvis").translation().y < 0.59) return false;
+    if (!(disturbedNeedsStep || (normalStepState && hasCaptureDemand)) || h.step.phase !== "idle" || h.step.cooldown > 0 || h.body("pelvis").translation().y < 0.59) return false;
     const demand = Math.max(outside * 3, (this.risk - 0.18) * 0.9, this.speed * 0.32, this.disturbanceRisk * 0.65);
     if (demand < 0.12) return false;
     const choice = this.chooseStep(); if (!choice) return false;
@@ -199,7 +192,7 @@ export class BalanceController {
   applySupport(dt) {
     const h = this.h; if (["passive", "downed"].includes(this.state)) return;
     const grossAuthority = 0.1 + 0.9 * this.reactionAuthority();
-    const pelvis = h.body("pelvis"), pp = v(pelvis.translation()), pv = v(pelvis.linvel()), swing = h.step.phase !== "idle" ? h.step.side : null, drive = h.controlDrive(), supports = [];
+    const pelvis = h.body("pelvis"), abdomen = h.body("abdomen"), chest = h.body("chest"), pp = v(pelvis.translation()), pv = v(pelvis.linvel()), swing = h.step.phase !== "idle" ? h.step.side : null, drive = h.controlDrive(), supports = [];
     for (const side of ["L", "R"]) {
       const foot = h.body("foot" + side), data = h.feet[side]; if (side === swing || data.quality < 0.14) continue;
       const capacity = h.legCapacity(side); if (capacity < 0.08) continue; supports.push({ side, foot, data, capacity });
@@ -208,12 +201,11 @@ export class BalanceController {
       h.forcePair(foot, pelvis, traction, (92 * capacity * (1 - release) + 9) * grossAuthority, dt);
       if (err.length() > 0.11 || release > 0.82) data.anchor.lerp(pos, clamp(dt * 7, 0, 1));
     }
-    const total = supports.reduce((s, x) => s + x.data.quality * x.capacity, 0);
+    const total = supports.reduce((s, x) => s + s.data?.quality * s.capacity, 0);
+    const supportTotal = supports.reduce((sum, item) => sum + item.data.quality * item.capacity, 0);
     for (const s of supports) {
-      if (total <= 1e-5) continue;
-      const share = s.data.quality * s.capacity / total, targetHeight = 0.97 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 900 - pv.y * 140, -130, 580);
-      // Enough ground reaction to stand as an inverted pendulum, but not enough
-      // to erase the displacement that should precede a capture step.
+      if (supportTotal <= 1e-5) continue;
+      const share = s.data.quality * s.capacity / supportTotal, targetHeight = 0.97 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 900 - pv.y * 140, -130, 580);
       const horizontalX = clamp((this.supportCenter.x - this.com.x) * 720 - this.comVelocity.x * 140, -200, 200) * grossAuthority * share;
       const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 720 - this.comVelocity.z * 140, -200, 200) * grossAuthority * share;
       const vertical = Math.max(0, (h.mass * 9.81 + hf) * share);
@@ -223,6 +215,20 @@ export class BalanceController {
     if (supports.length) {
       const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(360 + this.risk * 95).addScaledVector(v(pelvis.angvel()), -(50 + this.risk * 20)).multiplyScalar(grossAuthority);
       for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (160 + this.risk * 38) * grossAuthority, dt);
+
+      // Keep the axial torso stacked over the supported pelvis. This is an
+      // internal muscle pair, not a magic world torque: the equal/opposite
+      // reaction goes into the pelvis and then through real foot contact.
+      const pelvisAv = v(pelvis.angvel());
+      const abdomenUp = UP.clone().applyQuaternion(q(abdomen.rotation()));
+      const abdomenRel = v(abdomen.angvel()).sub(pelvisAv);
+      const abdomenCorr = abdomenUp.cross(UP).multiplyScalar(150).addScaledVector(abdomenRel, -18).multiplyScalar(grossAuthority * drive);
+      h.torquePair(pelvis, abdomen, abdomenCorr, 105 * grossAuthority * drive, dt);
+
+      const chestUp = UP.clone().applyQuaternion(q(chest.rotation()));
+      const chestRel = v(chest.angvel()).sub(v(abdomen.angvel()));
+      const chestCorr = chestUp.cross(UP).multiplyScalar(175).addScaledVector(chestRel, -20).multiplyScalar(grossAuthority * drive);
+      h.torquePair(abdomen, chest, chestCorr, 120 * grossAuthority * drive, dt);
     }
   }
 
