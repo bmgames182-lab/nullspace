@@ -65,7 +65,7 @@ test("arm shot stays mostly local", () => {
 });
 
 test("leg shot reduces local capacity and can recover without torso-first limp", () => {
-  const f = fixture(); try { settle(f); const before = f.h.legCapacity("L"); f.h.hit("shinL", {x:0,y:0,z:-1}, 18, f.h.body("shinL").translation()); advance(f, 0.5); assert.ok(f.h.legCapacity("L") <= before); assert.ok(f.h.body("pelvis").translation().y > 0.5); assert.equal(f.h.physiology.unconscious, false); assert.equal(f.h.passiveHandoff, false); } finally { f.world.free(); }
+  const f = fixture(); try { settle(f); const before = f.h.physiology.localLimbCapacity("leg", "L"); f.h.hit("shinL", {x:0,y:0,z:-1}, 18, f.h.body("shinL").translation()); advance(f, 0.5); const after = f.h.physiology.localLimbCapacity("leg", "L"); assert.ok(after < before, `local leg capacity should fall after injury (${before.toFixed(3)} -> ${after.toFixed(3)})`); assert.ok(f.h.body("pelvis").translation().y > 0.5); assert.equal(f.h.physiology.unconscious, false); assert.equal(f.h.passiveHandoff, false); } finally { f.world.free(); }
 });
 
 test("moderate head shot can daze without switching off both legs", () => {
