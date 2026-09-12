@@ -44,11 +44,6 @@ test("clean human stands anatomically upright for 30 seconds with a real support
   const f = fixture(); try {
     let max = 0;
     advance(f, 30, (h) => { const p = h.body("pelvis").linvel(); max = Math.max(max, Math.hypot(p.x,p.y,p.z)); });
-    const pose = Object.fromEntries(["pelvis", "abdomen", "chest", "head", "footL", "footR"].map((part) => {
-      const p = f.h.body(part).translation();
-      return [part, { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3) }];
-    }));
-    console.log("30s-pose", JSON.stringify({ pose, balance: f.h.balanceSnapshot(), steps: f.h.metrics.steps, maxPelvisSpeed: +max.toFixed(3) }));
     assertUprightPosture(f.h, "30 s idle human");
     assert.equal(f.h.passiveHandoff, false);
     assert.ok(f.h.balanceSnapshot().supportPolygon.length >= 4);
@@ -62,7 +57,7 @@ test("chest shot is local first, not impact-frame ragdoll", () => {
 });
 
 test("medium shove yields, takes a finite-speed capture step, then keeps fighting", () => {
-  const f = fixture(); try { settle(f); const before = f.h.metrics.steps, start = vec(f.h.body("pelvis").translation()); let risk = 0, displacement = 0, footSpeed = 0; disturb(f, "chest", new THREE.Vector3(5.2,0,0), { x:0,y:0.12,z:0 }); advance(f, 2.5, (h) => { risk = Math.max(risk, h.balance.risk); displacement = Math.max(displacement, vec(h.body("pelvis").translation()).distanceTo(start)); if (h.step.phase !== "idle") footSpeed = Math.max(footSpeed, vec(h.body("foot" + h.step.side).linvel()).sub(vec(h.body("pelvis").linvel())).length()); }); assert.ok(risk > 0.18); assert.ok(displacement > 0.07); assert.ok(f.h.metrics.steps > before, "expected physical capture step"); assert.ok(footSpeed < 2.5, `swing foot too fast ${footSpeed.toFixed(2)}`); assert.equal(f.h.passiveHandoff, false); } finally { f.world.free(); }
+  const f = fixture(); try { settle(f); const before = f.h.metrics.steps, start = vec(f.h.body("pelvis").translation()), chestStart = vec(f.h.body("chest").translation()); let risk = 0, displacement = 0, chestDisplacement = 0, footSpeed = 0, minTranslationAuthority = 1; disturb(f, "chest", new THREE.Vector3(5.2,0,0), { x:0,y:0.12,z:0 }); advance(f, 2.5, (h) => { risk = Math.max(risk, h.balance.risk); displacement = Math.max(displacement, vec(h.body("pelvis").translation()).distanceTo(start)); chestDisplacement = Math.max(chestDisplacement, vec(h.body("chest").translation()).distanceTo(chestStart)); minTranslationAuthority = Math.min(minTranslationAuthority, h.balance.translationAuthority()); if (h.step.phase !== "idle") footSpeed = Math.max(footSpeed, vec(h.body("foot" + h.step.side).linvel()).sub(vec(h.body("pelvis").linvel())).length()); }); const metrics = `risk=${risk.toFixed(3)} pelvis=${displacement.toFixed(3)} chest=${chestDisplacement.toFixed(3)} steps=${f.h.metrics.steps-before} foot=${footSpeed.toFixed(3)} auth=${minTranslationAuthority.toFixed(3)}`; assert.ok(risk > 0.18, metrics); assert.ok(displacement > 0.07, metrics); assert.ok(f.h.metrics.steps > before, `expected physical capture step; ${metrics}`); assert.ok(footSpeed < 2.5, `swing foot too fast; ${metrics}`); assert.equal(f.h.passiveHandoff, false); } finally { f.world.free(); }
 });
 
 test("arm shot stays mostly local", () => {
