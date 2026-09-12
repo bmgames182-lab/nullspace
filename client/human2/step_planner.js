@@ -22,6 +22,7 @@ export class StepPlanner {
       cooldown: 0.22,
       from: new THREE.Vector3(),
       target: new THREE.Vector3(),
+      initialTarget: new THREE.Vector3(),
       urgency: 0,
       swingDuration: 0.3,
       liftDuration: 0.09,
@@ -63,6 +64,7 @@ export class StepPlanner {
     st.cooldown = 0;
     st.from.copy(from);
     st.target.copy(goal);
+    st.initialTarget.copy(goal);
     st.urgency = clamp(urgency, 0, 1);
     st.swingDuration = swingDuration;
     st.liftDuration = liftDuration;
@@ -77,12 +79,50 @@ export class StepPlanner {
     return this.h.lastStepSide === "L" ? "R" : "L";
   }
 
+  retargetDuringSwing(dt) {
+    const h = this.h;
+    const st = h.step;
+    if (!["unload", "swing"].includes(st.phase) || st.urgency < 0.28) return;
+    const balance = h.balance;
+    if (!balance?.capture || !balance?.escape || (balance.risk ?? 0) < 0.24) return;
+    if (st.phase === "swing" && st.time / Math.max(0.001, st.swingDuration) > 0.78) return;
+
+    const pelvis = v(h.body("pelvis").translation());
+    const escape = balance.escape.clone().setY(0);
+    if (escape.lengthSq() < 1e-8) return;
+    escape.normalize();
+    const lateral = new THREE.Vector3(-escape.z, 0, escape.x);
+    const sign = st.side === "L" ? -1 : 1;
+    const desired = new THREE.Vector3(balance.capture.x, st.target.y, balance.capture.z)
+      .addScaledVector(lateral, sign * (0.09 + 0.045 * st.urgency));
+
+    const reach = desired.clone().sub(pelvis).setY(0);
+    reach.clampLength(0.08, st.urgency > 0.78 ? 0.58 : 0.5);
+    desired.x = pelvis.x + reach.x;
+    desired.z = pelvis.z + reach.z;
+
+    const fromPlan = desired.clone().sub(st.initialTarget).setY(0);
+    const maxPlanDrift = 0.09 + st.urgency * 0.1;
+    if (fromPlan.length() > maxPlanDrift) {
+      fromPlan.setLength(maxPlanDrift);
+      desired.x = st.initialTarget.x + fromPlan.x;
+      desired.z = st.initialTarget.z + fromPlan.z;
+    }
+
+    const delta = desired.clone().sub(st.target).setY(0);
+    const maxRetarget = dt * (0.24 + st.urgency * 0.58);
+    if (delta.length() > maxRetarget) delta.setLength(maxRetarget);
+    st.target.x += delta.x;
+    st.target.z += delta.z;
+  }
+
   update(dt) {
     const h = this.h;
     const st = h.step;
     st.cooldown = Math.max(-0.2, st.cooldown - dt);
     if (st.phase === "idle") return;
     st.time += dt;
+    this.retargetDuringSwing(dt);
 
     if (st.phase === "unload" && st.time >= st.liftDuration) {
       st.phase = "swing";
@@ -98,10 +138,15 @@ export class StepPlanner {
         st.phase = "settle";
         st.time = 0;
       }
-    } else if (st.phase === "settle" && st.time >= 0.07) {
-      st.phase = "idle";
-      st.time = 0;
-      st.cooldown = st.urgency > 0.72 ? 0.055 : 0.12;
+    } else if (st.phase === "settle") {
+      const risk = h.balance?.risk ?? 0;
+      const urgentChain = risk > 0.5 && st.urgency > 0.5;
+      const settleDuration = urgentChain ? 0.03 : 0.07;
+      if (st.time >= settleDuration) {
+        st.phase = "idle";
+        st.time = 0;
+        st.cooldown = urgentChain ? 0.012 : st.urgency > 0.72 ? 0.05 : 0.12;
+      }
     }
   }
 
@@ -116,7 +161,8 @@ export class StepPlanner {
     target.lerpVectors(st.from, st.target, progress);
 
     const distance = st.from.clone().setY(0).distanceTo(st.target.clone().setY(0));
-    const liftHeight = clamp(0.065 + distance * 0.1 + st.urgency * 0.025, 0.065, 0.125);
+    const urgentShuffle = smooth((st.urgency - 0.55) / 0.45);
+    const liftHeight = clamp(0.065 + distance * 0.1 + st.urgency * 0.025 - urgentShuffle * 0.016, 0.055, 0.125);
     let lift = 0;
     if (st.phase === "unload") lift = liftHeight * smooth(st.time / st.liftDuration);
     else if (st.phase === "swing") lift = liftHeight * (0.82 + 0.18 * (1 - Math.abs(progress * 2 - 1)));
