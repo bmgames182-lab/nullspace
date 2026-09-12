@@ -25,7 +25,11 @@ const scenarios = [
 ];
 
 const checkpoints = [0, 0.08, 0.18, 0.36, 0.7, 1.2, 2.2, 3.5];
-const visualCheckpoints = [0.18, 0.7];
+const defaultVisualCheckpoints = [0.18, 0.7];
+const visualCheckpointsFor = (scenario) =>
+  scenario.id === "repeated-light-chest"
+    ? [0.18, 0.7, 2.2, 3.5]
+    : defaultVisualCheckpoints;
 const idFor = (seconds) => String(Math.round(seconds * 1000)).padStart(4, "0");
 
 async function waitForAge(page, age) {
@@ -128,8 +132,24 @@ function assertBehavior(entry) {
       assert.ok((early.metrics.steps ?? 0) > 0 || (early.directedSteps ?? 0) > 0, `${id}: lateral torso hit needs a catch step`);
   }
   if (id === "repeated-light-chest") {
-    assert.ok(final.parts.pelvis.position.y > 0.72, `three light torso hits should recover (pelvis=${final.parts.pelvis.position.y.toFixed(3)}, state=${final.state})`);
-    assert.ok(!["down", "collapse"].includes(final.state), `light hits should not leave a floor ragdoll (${final.state})`);
+    const trauma = final.behaviorIntent?.trauma;
+    assert.ok(early.parts.pelvis.position.y > 0.78, `rapid light hits must not impact-frame floor the body (${early.parts.pelvis.position.y.toFixed(3)})`);
+    assert.ok(mid.parts.pelvis.position.y > 0.72, `cumulative panic should build before the fall (${mid.parts.pelvis.position.y.toFixed(3)})`);
+    assert.equal(final.dead, false, "cumulative light torso panic must not be treated as death");
+    assert.equal(final.physiology?.unconscious, false, "cumulative light torso panic is intended to remain conscious");
+    assert.equal(final.passiveHandoff, false, "cumulative panic must stay actively controlled before any passive handoff");
+    assert.equal(trauma?.mode, "panic", "three rapid light torso hits should escalate into panic mode");
+    assert.ok((trauma?.rapidTorsoHits ?? 0) >= 3, `rapid-hit accumulator should retain the three-hit episode (${trauma?.rapidTorsoHits})`);
+    assert.notEqual(final.state, "limp", "conscious cumulative panic must never look like a dead limp ragdoll");
+
+    const floorLike = final.parts.pelvis.position.y < 0.72 || ["collapse", "down"].includes(final.state);
+    if (floorLike) {
+      assert.equal(trauma?.groundActive, true, `floor transition must already be active conscious ground panic (state=${final.state})`);
+      assert.ok(
+        trauma?.reactionPhase === "groundPanic" || trauma?.behaviorPhase === "groundGuard",
+        `floor transition must guard/writhe rather than go inert (reaction=${trauma?.reactionPhase}, behavior=${trauma?.behaviorPhase})`,
+      );
+    }
   }
 }
 
@@ -201,7 +221,7 @@ try {
   // Screenshots are deliberately separate replays. A slow screenshot can no
   // longer advance the simulation before the next asserted timestamp.
   for (const scenario of scenarios) {
-    for (const elapsed of visualCheckpoints) {
+    for (const elapsed of visualCheckpointsFor(scenario)) {
       const replay = await replayScreenshot(page, scenario, elapsed);
       report.visualReplays.push({ scenario: scenario.id, ...replay });
     }
