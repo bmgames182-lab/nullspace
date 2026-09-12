@@ -50,6 +50,7 @@ export class BalanceController {
     this._prevPelvis = v(human.body("pelvis").linvel());
     this._prevCom = human.centreOfMass().velocity.clone();
     this._velocityReady = false;
+    this._selfMotionQuiet = 0;
     this.debugEnabled = false; this.debug = null;
   }
 
@@ -87,13 +88,31 @@ export class BalanceController {
 
   detectDisturbance(dt) {
     const chest = v(this.h.body("chest").linvel()), pelvis = v(this.h.body("pelvis").linvel()), com = this.h.centreOfMass().velocity;
+    const stepActive = !!this.h.step && this.h.step.phase !== "idle";
+    if (stepActive) this._selfMotionQuiet = 0.2;
+    else this._selfMotionQuiet = Math.max(0, this._selfMotionQuiet - dt);
+    const shielded = stepActive || this._selfMotionQuiet > 0;
+
     if (this._velocityReady && this.h.age > 0.8) {
       const cd = chest.clone().sub(this._prevChest).setY(0), pd = pelvis.clone().sub(this._prevPelvis).setY(0), md = com.clone().sub(this._prevCom).setY(0);
-      const kick = Math.max(clamp((cd.length() - 0.065) / 0.48, 0, 1.05) * 0.74, clamp((pd.length() - 0.05) / 0.38, 0, 1.05) * 0.72, clamp((md.length() - 0.022) / 0.18, 0, 1.05) * 0.88);
-      if (kick > 0.035) { this.disturbanceRisk = Math.max(this.disturbanceRisk, kick); const d = md.lengthSq() > 1e-5 ? md : cd.lengthSq() > pd.lengthSq() ? cd : pd; if (d.lengthSq() > 1e-6) this.disturbanceDirection.copy(d.normalize()); }
+      // Active recovery generates large but expected segment accelerations. Treat
+      // those as self-motion for a short window around each step so the observer
+      // cannot recursively classify its own correction as a fresh shove. A truly
+      // large new impulse can still punch through the shield.
+      const rawKick = Math.max(
+        clamp((cd.length() - 0.1) / 0.55, 0, 1.05) * 0.7,
+        clamp((pd.length() - 0.075) / 0.46, 0, 1.05) * 0.68,
+        clamp((md.length() - 0.038) / 0.23, 0, 1.05) * 0.9,
+      );
+      const kick = shielded ? clamp((rawKick - 0.7) / 0.3, 0, 1) * 0.78 : rawKick;
+      if (kick > 0.045) {
+        this.disturbanceRisk = Math.max(this.disturbanceRisk, kick);
+        const d = md.lengthSq() > 1e-5 ? md : cd.lengthSq() > pd.lengthSq() ? cd : pd;
+        if (d.lengthSq() > 1e-6) this.disturbanceDirection.copy(d.normalize());
+      }
     }
     this._prevChest.copy(chest); this._prevPelvis.copy(pelvis); this._prevCom.copy(com); this._velocityReady = true;
-    this.disturbanceRisk *= Math.exp(-dt * 2.8);
+    this.disturbanceRisk *= Math.exp(-dt * (shielded ? 3.4 : 2.8));
   }
 
   sample(dt) {
@@ -233,5 +252,5 @@ export class BalanceController {
     if (!this.debugEnabled) return; this.setupDebug(); const d = this.debug, points = this.supportHull.map((p) => new THREE.Vector3(p.x, p.y + 0.025, p.z));
     d.support.geometry.dispose(); d.support.geometry = new THREE.BufferGeometry().setFromPoints(points.length >= 2 ? points : [this.supportCenter, this.supportCenter.clone().add(new THREE.Vector3(0.001, 0, 0))]); d.com.position.copy(this.com); d.projection.position.copy(this.projectedCom).add(new THREE.Vector3(0, 0.025, 0)); d.capture.position.copy(this.capture).add(new THREE.Vector3(0, 0.035, 0)); if (this.stepTarget) d.target.position.copy(this.stepTarget).add(new THREE.Vector3(0, 0.035, 0)); else d.target.position.copy(this.supportCenter).setY(-5);
   }
-  snapshot() { return { state: this.state, stateAge: this.stateAge, risk: this.risk, geometricRisk: this.geometricRisk, disturbanceRisk: this.disturbanceRisk, reactionAuthority: this.reactionAuthority(), supportCenter: { x: this.supportCenter.x, y: this.supportCenter.y, z: this.supportCenter.z }, supportPolygon: this.supportHull.map((p) => ({ x: p.x, y: p.y, z: p.z })), com: { x: this.com.x, y: this.com.y, z: this.com.z }, projectedCom: { x: this.projectedCom.x, y: this.projectedCom.y, z: this.projectedCom.z }, predictedCom: { x: this.capture.x, y: this.capture.y, z: this.capture.z }, velocity: { x: this.comVelocity.x, y: this.comVelocity.y, z: this.comVelocity.z }, recoveryFoot: this.recoveryFoot, stepTarget: this.stepTarget && { x: this.stepTarget.x, y: this.stepTarget.y, z: this.stepTarget.z }, muscleScale: this.muscleScale(), outside: this.outside, speed: this.speed, lean: this.lean, angular: this.angular }; }
+  snapshot() { return { state: this.state, stateAge: this.stateAge, risk: this.risk, geometricRisk: this.geometricRisk, disturbanceRisk: this.disturbanceRisk, reactionAuthority: this.reactionAuthority(), supportCenter: { x: this.supportCenter.x, y: this.supportCenter.y, z: this.supportCenter.z }, supportPolygon: this.supportHull.map((p) => ({ x: p.x, y: p.y, z: p.z })), com: { x: this.com.x, y: this.com.y, z: this.com.z }, projectedCom: { x: this.projectedCom.x, y: this.projectedCom.y, z: this.projectedCom.z }, predictedCom: { x: this.capture.x, y: this.capture.y, z: this.capture.z }, velocity: { x: this.comVelocity.x, y: this.comVelocity.y, z: this.comVelocity.z }, recoveryFoot: this.recoveryFoot, stepTarget: this.stepTarget && { x: this.stepTarget.x, y: this.stepTarget.y, z: this.stepTarget.z }, muscleScale: this.muscleScale(), outside: this.outside, speed: this.speed, lean: this.lean, angular: this.angular, selfMotionQuiet: this._selfMotionQuiet }; }
 }
