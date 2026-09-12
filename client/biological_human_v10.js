@@ -21,7 +21,24 @@ export class BiologicalArtagdollHumanV10 extends BiologicalArtagdollHumanV9 {
 
   controlDrive() {
     const base = super.controlDrive();
-    const directed = this.hitReaction?.activeDriveScale?.() ?? 1;
+    const r = this.hitReaction;
+    const p = this.physiology;
+
+    // A moderate conscious head injury should primarily disturb the head/neck,
+    // attention and coordination. Do not turn that local daze into whole-body
+    // weakness while gross motor pathways are still available. Head-specific
+    // looseness is already produced by headStun and the regional muscle targets.
+    const consciousSupportedHead =
+      r?.zone === "head" &&
+      r.phase !== "ragdoll" &&
+      !r.finalRagdoll &&
+      !p?.unconscious &&
+      !p?.dead &&
+      (p?.brainFunction ?? 1) > 0.5 &&
+      (p?.consciousness ?? 1) > 0.45;
+    if (consciousSupportedHead) return clamp(Math.max(base, 0.82), 0, 1);
+
+    const directed = r?.activeDriveScale?.() ?? 1;
     return clamp(base * directed, 0, 1);
   }
 
@@ -66,7 +83,51 @@ export class BiologicalArtagdollHumanV10 extends BiologicalArtagdollHumanV9 {
   // real active-ragdoll steps: no root translation or canned locomotion.
   applyPanicMovement() {
     const r = this.hitReaction;
-    if (!r || this.dead || this.physiology?.unconscious) return super.applyPanicMovement();
+    const p = this.physiology;
+    if (!r || this.dead || p?.unconscious) return super.applyPanicMovement();
+
+    // Moderate conscious head trauma gets one small rescue step only when the
+    // body is genuinely losing support. Never hand the same head hit back to the
+    // legacy panic-step loop afterwards; that stacking was producing six frantic
+    // steps and a fake collapse while consciousness was actually recovering.
+    if (r.zone === "head" && !r.finalRagdoll && r.phase !== "ragdoll") {
+      if (this.directedSteps >= 1) return;
+      if (!["impact", "clutch", "dazed", "recover"].includes(r.phase)) return;
+      if (this.step.phase !== "idle" || this.step.cooldown > 0 || this.support < 0.18) return;
+
+      const pelvisBody = this.body("pelvis");
+      const chestBody = this.body("chest");
+      const pelvis = v(pelvisBody.translation());
+      const pv = v(pelvisBody.linvel());
+      const cv = v(chestBody.linvel());
+      const horizontalSpeed = Math.max(
+        Math.hypot(pv.x, pv.z),
+        Math.hypot(cv.x, cv.z),
+      );
+      const physicallyUnstable =
+        ["scramble", "brace"].includes(this.state) ||
+        this.support < 0.52 ||
+        pelvis.y < 0.78 ||
+        horizontalSpeed > 0.52;
+      if (!physicallyUnstable) return;
+
+      const travel = v(this.lastHit?.dir || { x: 0, y: 0, z: -1 });
+      travel.y = 0;
+      if (travel.lengthSq() < 1e-6) travel.set(0, 0, -1);
+      travel.normalize();
+      const lateral = new THREE.Vector3(-travel.z, 0, travel.x);
+      const weave = Math.sin(this.age * 2.6) * 0.055;
+      const target = pelvis
+        .clone()
+        .addScaledVector(travel, 0.075)
+        .addScaledVector(lateral, weave);
+      if (this.startScrambleStep(target)) {
+        this.directedSteps++;
+        this.behavior?.consumeStep?.();
+      }
+      return;
+    }
+
     if (!["panic", "hop", "dazed"].includes(r.phase)) return super.applyPanicMovement();
     if (this.step.phase !== "idle" || this.step.cooldown > 0 || this.support < 0.18) return;
 
@@ -80,11 +141,11 @@ export class BiologicalArtagdollHumanV10 extends BiologicalArtagdollHumanV9 {
     travel.normalize();
     const lateral = new THREE.Vector3(-travel.z, 0, travel.x);
     const weave = Math.sin((this.age + this.directedSteps * 0.73) * 3.1) *
-      (r.zone === "head" ? 0.16 : r.zone === "chest" ? 0.12 : 0.09);
+      (r.zone === "chest" ? 0.12 : 0.09);
 
     const target = pelvis
       .clone()
-      .addScaledVector(travel, r.zone === "head" ? 0.13 : 0.2 + r.startle * 0.1)
+      .addScaledVector(travel, 0.2 + r.startle * 0.1)
       .addScaledVector(lateral, weave);
 
     const requestedSide = r.zone === "leg" && r.side ? r.side : null;
