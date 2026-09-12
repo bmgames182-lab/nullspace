@@ -87,24 +87,36 @@ try {
       lab.pausePhysics(true);
       lab.advance(2.4);
     });
-    await page.evaluate((part) => lab.aimAt(part), name);
+    await page.waitForTimeout(115);
 
-    const aimDot = await page.evaluate((part) => {
+    const shot = await page.evaluate((part) => {
       const p = lab.human.body(part).translation();
+      // Keep placement, aim and the real pointer event in one JS task. The normal
+      // FPS loop pins player eye height to 1.68 m every animation frame; allowing
+      // a frame between these operations would move the camera and make an exact
+      // collider assertion depend on whichever limb happens to cross that ray.
+      lab.setView(
+        { x: p.x, y: p.y, z: p.z + 2.8 },
+        { x: p.x, y: p.y, z: p.z },
+        50,
+      );
+      lab.aimAt(part);
+
       const origin = lab.camera.position;
       const tx = p.x - origin.x;
       const ty = p.y - origin.y;
       const tz = p.z - origin.z;
       const length = Math.hypot(tx, ty, tz);
       const direction = lab.camera.getWorldDirection(origin.clone());
-      return (direction.x * tx + direction.y * ty + direction.z * tz) / length;
-    }, name);
-    assert.ok(aimDot > 0.9999, `${name} is not centred before firing (${aimDot})`);
+      const aimDot = (direction.x * tx + direction.y * ty + direction.z * tz) / length;
 
-    await page.mouse.down({ button: "left" });
-    await page.mouse.up({ button: "left" });
-    const hitPart = await page.evaluate(() => lab.human.lastHit.part);
-    assert.equal(hitPart, name, `real raycast should hit ${name}`);
+      document.dispatchEvent(new PointerEvent("pointerdown", { button: 0, bubbles: true }));
+      document.dispatchEvent(new PointerEvent("pointerup", { button: 0, bubbles: true }));
+      return { aimDot, hitPart: lab.human.lastHit?.part ?? null };
+    }, name);
+
+    assert.ok(shot.aimDot > 0.9999, `${name} is not centred before firing (${shot.aimDot})`);
+    assert.equal(shot.hitPart, name, `real raycast should hit ${name}`);
 
     const bloodNow = await page.evaluate(() => lab.bloodStats());
     assert.ok(bloodNow.wounds > 0 && bloodNow.effects > 0, `${name}: real gunshot should create blood FX`);

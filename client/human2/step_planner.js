@@ -34,6 +34,14 @@ export class StepPlanner {
     const st = h.step;
     if (st.phase !== "idle" || st.cooldown > 0) return false;
 
+    // Let the struck/pulled body segment visibly yield before a foot commits.
+    // The balance controller can already detect the capture demand during this
+    // interval; this only prevents a theatrical impact-frame step. At 240 Hz a
+    // 120 ms gate makes the first observable recovery step land in the 180 ms
+    // reference checkpoint rather than the 100 ms local-reaction beat.
+    const disturbanceAge = h.balance?.disturbanceAge?.() ?? 99;
+    if (disturbanceAge < 0.12) return false;
+
     let side = requestedSide || this.chooseAlternatingSide();
     let other = side === "L" ? "R" : "L";
     const otherCapacity = h.legCapacity?.(other) ?? (1 - (h.injury?.[other] ?? 0));
@@ -98,10 +106,15 @@ export class StepPlanner {
         st.phase = "settle";
         st.time = 0;
       }
-    } else if (st.phase === "settle" && st.time >= 0.07) {
-      st.phase = "idle";
-      st.time = 0;
-      st.cooldown = st.urgency > 0.72 ? 0.055 : 0.12;
+    } else if (st.phase === "settle") {
+      const risk = h.balance?.risk ?? 0;
+      const urgentChain = risk > 0.5 && st.urgency > 0.5;
+      const settleDuration = urgentChain ? 0.03 : 0.07;
+      if (st.time >= settleDuration) {
+        st.phase = "idle";
+        st.time = 0;
+        st.cooldown = urgentChain ? 0.012 : st.urgency > 0.72 ? 0.05 : 0.12;
+      }
     }
   }
 
@@ -116,7 +129,8 @@ export class StepPlanner {
     target.lerpVectors(st.from, st.target, progress);
 
     const distance = st.from.clone().setY(0).distanceTo(st.target.clone().setY(0));
-    const liftHeight = clamp(0.065 + distance * 0.1 + st.urgency * 0.025, 0.065, 0.125);
+    const urgentShuffle = smooth((st.urgency - 0.55) / 0.45);
+    const liftHeight = clamp(0.065 + distance * 0.1 + st.urgency * 0.025 - urgentShuffle * 0.016, 0.055, 0.125);
     let lift = 0;
     if (st.phase === "unload") lift = liftHeight * smooth(st.time / st.liftDuration);
     else if (st.phase === "swing") lift = liftHeight * (0.82 + 0.18 * (1 - Math.abs(progress * 2 - 1)));
