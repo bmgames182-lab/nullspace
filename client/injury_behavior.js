@@ -27,6 +27,16 @@ export class InjuryBehavior {
   }
 
   onHit({ event, physiology, part, side, strength = 12 }) {
+    // Rapid torso follow-ups belong to the same coping episode. Remember how
+    // much of the finite protective-step budget has already been spent before
+    // resetting timers for the fresh impact. Otherwise three small hits can
+    // repeatedly re-arm the same panic locomotion and walk the body into a fall.
+    const rapidTorsoFollowup =
+      this.family === "torso" &&
+      (event?.family || "other") === "torso" &&
+      this.injuryAge < 0.8;
+    const previousGuardSteps = this.guardSteps;
+
     this.hitCount++;
     this.injuryAge = 0;
     this.phase = "flinch";
@@ -83,6 +93,14 @@ export class InjuryBehavior {
     } else {
       this.maxGuardSteps = 0;
     }
+
+    // A rapid hit does not magically refund already-used protective steps.
+    // Escalating from a weak to a strong hit can still increase maxGuardSteps;
+    // preserving the consumed count simply keeps the burst finite.
+    if (rapidTorsoFollowup) {
+      this.guardSteps = Math.min(previousGuardSteps, this.maxGuardSteps);
+    }
+
     this.nextStep = 0.18 + (1 - this.panic) * 0.22;
 
     const p = physiology;
@@ -211,11 +229,21 @@ export class InjuryBehavior {
       this.guardSteps < this.maxGuardSteps &&
       this.injuryAge > 0.32 &&
       this.injuryAge < 2.25;
-    return (
+
+    const aroused =
       (this.phase === "panic" || guardedTorsoMove) &&
       this.retreat > 0.3 &&
-      this.nextStep <= 0
-    );
+      this.nextStep <= 0;
+
+    // Torso panic locomotion has a strict finite budget. A light torso hit has
+    // maxGuardSteps=0, so it can visibly flinch/guard/panic without being forced
+    // to walk. Real COM instability is still handled independently by the
+    // whole-body balance controller and can request as many rescue steps as the
+    // physics actually needs.
+    if (this.family === "torso") {
+      return aroused && this.guardSteps < this.maxGuardSteps;
+    }
+    return aroused;
   }
 
   consumeStep() {
