@@ -11,6 +11,7 @@ const SAMPLE_URLS = Object.freeze({
 });
 
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
+const isPainGruntSet = (url) => url === SAMPLE_URLS.painGrunts;
 
 export class PainAudio {
   constructor() {
@@ -22,18 +23,27 @@ export class PainAudio {
     this.groundInterval = 1.05;
     this.ctx = null;
     this.active = new Set();
+    this.stopTimers = new Map();
     this.lastMode = "calm";
     this.wasGrounded = false;
   }
 
+  clearVoice(audio, rewind = false) {
+    const timer = this.stopTimers.get(audio);
+    if (timer != null) clearTimeout(timer);
+    this.stopTimers.delete(audio);
+    try {
+      audio.pause();
+      if (rewind) audio.currentTime = 0;
+    } catch {}
+    this.active.delete(audio);
+  }
+
   reset() {
-    for (const audio of this.active) {
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-      } catch {}
-    }
+    for (const audio of [...this.active]) this.clearVoice(audio, true);
     this.active.clear();
+    for (const timer of this.stopTimers.values()) clearTimeout(timer);
+    this.stopTimers.clear();
     this.lastImpactAt = -Infinity;
     this.lastGroundVoiceAt = -Infinity;
     this.lastVoiceAt = -Infinity;
@@ -49,15 +59,16 @@ export class PainAudio {
     while (this.active.size >= max) {
       const audio = this.active.values().next().value;
       if (!audio) break;
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-      } catch {}
-      this.active.delete(audio);
+      this.clearVoice(audio, true);
     }
   }
 
-  playSample(url, volume = 0.7, rate = 1) {
+  playSample(
+    url,
+    volume = 0.7,
+    rate = 1,
+    { maxDuration = null, randomSeek = false, fallbackHarshness = null } = {},
+  ) {
     if (this.disabled || typeof Audio === "undefined") return;
     this.trimVoices(3);
     const audio = new Audio(url);
@@ -67,16 +78,54 @@ export class PainAudio {
     audio.playbackRate = clamp(rate, 0.78, 1.18);
     this.active.add(audio);
     this.lastVoiceAt = this.now();
-    const cleanup = () => this.active.delete(audio);
+
+    const cleanup = () => this.clearVoice(audio, false);
     audio.addEventListener("ended", cleanup, { once: true });
     audio.addEventListener("error", cleanup, { once: true });
+
+    // The public-domain pain-grunt source is a long collection, not one 28s
+    // reaction. For grunt calls we jump to a random valid point once metadata is
+    // known and stop after a short burst. Screams retain their natural lengths.
+    if (randomSeek) {
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
+          const clip = Math.max(0.35, maxDuration ?? 1.2);
+          const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+          const latest = Math.max(0, duration - clip - 0.08);
+          if (latest > 0.25) {
+            try {
+              audio.currentTime = Math.random() * latest;
+            } catch {}
+          }
+        },
+        { once: true },
+      );
+    }
+
+    if (Number.isFinite(maxDuration) && maxDuration > 0) {
+      const timer = setTimeout(() => cleanup(), maxDuration * 1000);
+      this.stopTimers.set(audio, timer);
+    }
+
     const promise = audio.play();
     if (promise?.catch) {
       promise.catch(() => {
         cleanup();
-        this.synthPain(volume, rate < 0.98 ? 1 : 0.7);
+        this.synthPain(
+          volume,
+          fallbackHarshness ?? (rate < 0.98 ? 1 : 0.7),
+        );
       });
     }
+  }
+
+  gruntOptions(min = 0.78, max = 1.45) {
+    return {
+      maxDuration: min + Math.random() * Math.max(0, max - min),
+      randomSeek: true,
+      fallbackHarshness: 0.72,
+    };
   }
 
   chooseImpactSample(mode, strength) {
@@ -94,18 +143,42 @@ export class PainAudio {
     if (this.disabled) return;
     const torso = /^(chest|abdomen|pelvis)$/.test(part || "");
     const head = part === "head";
-    if (!torso && !head) return;
+    const limb = /^(upperArm|lowerArm|hand|thigh|shin|foot)[LR]$/.test(part || "");
+    if (!torso && !head && !limb) return;
+
+    const pain = clamp(event?.painSpike ?? strength / 22, 0.1, 1);
+    // Minor extremity taps stay physical without constantly vocalising. Strong
+    // arm/leg trauma gets short grunts; screams remain biased to torso/head and
+    // the explicit panic state.
+    if (limb && strength < 12 && pain < 0.42) return;
 
     const now = this.now();
-    const mode = human?.traumaSnapshot?.()?.mode || "calm";
-    const cooldown = mode === "panic" ? 0.3 : 0.52;
+    const trauma = human?.traumaSnapshot?.();
+    const mode = trauma?.active ? trauma.mode : "calm";
+    const cooldown = mode === "panic" ? 0.3 : limb ? 0.62 : 0.52;
     if (now - this.lastImpactAt < cooldown) return;
     this.lastImpactAt = now;
 
-    const pain = clamp(event?.painSpike ?? strength / 22, 0.15, 1);
+    if (limb) {
+      const volume = clamp(0.22 + pain * 0.42 + (mode === "panic" ? 0.08 : 0), 0.2, 0.7);
+      this.playSample(
+        SAMPLE_URLS.painGrunts,
+        volume,
+        0.92 + Math.random() * 0.12,
+        this.gruntOptions(0.72, 1.28),
+      );
+      return;
+    }
+
     const volume = clamp(0.3 + pain * 0.44 + (mode === "panic" ? 0.18 : 0), 0.28, 0.96);
     const rate = 0.91 + Math.random() * 0.12 - (mode === "panic" ? 0.035 : 0);
-    this.playSample(this.chooseImpactSample(mode, strength), volume, rate);
+    const url = this.chooseImpactSample(mode, strength);
+    this.playSample(
+      url,
+      volume,
+      rate,
+      isPainGruntSet(url) ? this.gruntOptions() : {},
+    );
   }
 
   panicTransition(trauma) {
@@ -120,7 +193,12 @@ export class PainAudio {
     const now = this.now();
     if (now - this.lastVoiceAt < 0.28) return;
     const url = Math.random() < 0.5 ? SAMPLE_URLS.painGrunts : SAMPLE_URLS.screamShort;
-    this.playSample(url, trauma?.mode === "panic" ? 0.58 : 0.42, 0.86 + Math.random() * 0.1);
+    this.playSample(
+      url,
+      trauma?.mode === "panic" ? 0.58 : 0.42,
+      0.86 + Math.random() * 0.1,
+      isPainGruntSet(url) ? this.gruntOptions(0.72, 1.2) : {},
+    );
   }
 
   update(human) {
@@ -149,7 +227,12 @@ export class PainAudio {
       : roll < 0.84
         ? SAMPLE_URLS.screamShort
         : SAMPLE_URLS.screamLong;
-    this.playSample(url, 0.22 + decay * 0.32, 0.84 + Math.random() * 0.13);
+    this.playSample(
+      url,
+      0.22 + decay * 0.32,
+      0.84 + Math.random() * 0.13,
+      isPainGruntSet(url) ? this.gruntOptions(0.75, 1.5) : {},
+    );
   }
 
   ensureContext() {
