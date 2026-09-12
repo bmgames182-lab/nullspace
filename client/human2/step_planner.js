@@ -34,6 +34,14 @@ export class StepPlanner {
     const st = h.step;
     if (st.phase !== "idle" || st.cooldown > 0) return false;
 
+    // Let the struck/pulled body segment visibly yield before a foot commits.
+    // The balance controller can already detect the capture demand during this
+    // interval; this only prevents a theatrical impact-frame step. At 240 Hz a
+    // 120 ms gate makes the first observable recovery step land in the 180 ms
+    // reference checkpoint rather than the 100 ms local-reaction beat.
+    const disturbanceAge = h.balance?.disturbanceAge?.() ?? 99;
+    if (disturbanceAge < 0.12) return false;
+
     let side = requestedSide || this.chooseAlternatingSide();
     let other = side === "L" ? "R" : "L";
     const otherCapacity = h.legCapacity?.(other) ?? (1 - (h.injury?.[other] ?? 0));
