@@ -44,6 +44,11 @@ test("clean human stands anatomically upright for 30 seconds with a real support
   const f = fixture(); try {
     let max = 0;
     advance(f, 30, (h) => { const p = h.body("pelvis").linvel(); max = Math.max(max, Math.hypot(p.x,p.y,p.z)); });
+    const pose = Object.fromEntries(["pelvis", "abdomen", "chest", "head", "footL", "footR"].map((part) => {
+      const p = f.h.body(part).translation();
+      return [part, { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3) }];
+    }));
+    console.log("30s-pose", JSON.stringify({ pose, balance: f.h.balanceSnapshot(), steps: f.h.metrics.steps, maxPelvisSpeed: +max.toFixed(3) }));
     assertUprightPosture(f.h, "30 s idle human");
     assert.equal(f.h.passiveHandoff, false);
     assert.ok(f.h.balanceSnapshot().supportPolygon.length >= 4);
