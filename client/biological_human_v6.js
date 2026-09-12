@@ -1,6 +1,6 @@
 // Compatibility bridge: existing runtime/tests import the v6 symbol, while the
-// current implementation lives in v15. V15 preserves the localized reaction,
-// physiology, support-polygon balance and impulse-aware capture-step stack, then
-// fixes emergency-state recovery hysteresis so a physically recovered body can
-// actually return to stable balance instead of staying latched in scramble mode.
-export { BiologicalArtagdollHumanV15 as BiologicalArtagdollHumanV6 } from "./biological_human_v15.js";
+// live implementation now uses V18. It preserves localized physiology, the V15
+// support-polygon/capture-step controller and V16 finite choreography budgets,
+// then adds stateful calm-vs-panic torso trauma, conscious ground writhing and
+// optional CC0 pain audio that follows (but never drives) the physical state.
+export { BiologicalArtagdollHumanV18 as BiologicalArtagdollHumanV6 } from "./biological_human_v18.js";
