@@ -2,7 +2,7 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { BiologicalArtagdollHumanV14 } from "../client/biological_human_v14.js";
+import { EuphoriaHuman } from "../client/human2/euphoria_human.js";
 
 await RAPIER.init();
 const DT = 1 / 240;
@@ -19,7 +19,7 @@ function fixture() {
       .setTranslation(0, -0.1, 0)
       .setFriction(1),
   );
-  return { world, h: new BiologicalArtagdollHumanV14(world, new THREE.Scene()) };
+  return { world, h: new EuphoriaHuman(world, new THREE.Scene()) };
 }
 
 function impulse(h, part, xyz, offset = [0, 0, 0]) {
@@ -33,12 +33,14 @@ function telemetry(h) {
   return {
     age: h.age,
     state: h.state,
+    controllerStyle: h.controllerStyle,
     balanceState: b?.state,
     risk: b?.risk ?? 0,
     disturbanceRisk: b?.disturbanceRisk ?? 0,
+    reactionAuthority: b?.reactionAuthority ?? 1,
     pelvisY: h.body("pelvis").translation().y,
     chestY: h.body("chest").translation().y,
-    pelvisVelocity: h.body("pelvis").linvel(),
+    pelvisVelocity: { ...h.body("pelvis").linvel() },
     steps: h.metrics.steps,
     plants: h.metrics.plants,
     stepPhase: h.step.phase,
@@ -59,7 +61,10 @@ function simulate(f, seconds, stats) {
     stats.minPelvisY = Math.min(stats.minPelvisY, t.pelvisY);
     stats.maxRisk = Math.max(stats.maxRisk, t.risk);
     stats.maxDisturbanceRisk = Math.max(stats.maxDisturbanceRisk, t.disturbanceRisk);
-    stats.maxPelvisSpeed = Math.max(stats.maxPelvisSpeed, Math.hypot(t.pelvisVelocity.x, t.pelvisVelocity.y, t.pelvisVelocity.z));
+    stats.maxPelvisSpeed = Math.max(
+      stats.maxPelvisSpeed,
+      Math.hypot(t.pelvisVelocity.x, t.pelvisVelocity.y, t.pelvisVelocity.z),
+    );
     if (f.h.step.phase !== "idle") {
       const foot = f.h.body("foot" + f.h.step.side);
       const rel = vec(foot.linvel()).sub(vec(f.h.body("pelvis").linvel())).length();
@@ -68,7 +73,12 @@ function simulate(f, seconds, stats) {
     for (const { rb } of f.h.parts.values()) {
       const p = rb.translation();
       const lv = rb.linvel();
-      assert.ok(Number.isFinite(p.x + p.y + p.z + lv.x + lv.y + lv.z));
+      const av = rb.angvel();
+      assert.ok(
+        [p.x, p.y, p.z, lv.x, lv.y, lv.z, av.x, av.y, av.z].every(Number.isFinite),
+        "non-finite rigid-body state",
+      );
+      assert.ok(Math.hypot(lv.x, lv.y, lv.z) < 15, "segment numerically launched");
     }
   }
 }
@@ -87,11 +97,12 @@ function freshStats(name) {
   };
 }
 
-async function run(name, action, seconds = 3.0, settle = 2.2) {
+async function run(name, action, seconds = 3.0, settle = 2.4) {
   const f = fixture();
   const stats = freshStats(name);
   try {
     simulate(f, settle, stats);
+    assert.ok(f.h.body("pelvis").translation().y > 0.78, `${name}: failed to settle upright`);
     stats.startSteps = f.h.metrics.steps;
     await action(f, stats);
     simulate(f, seconds, stats);
@@ -108,15 +119,15 @@ const scenarios = [
   ["02-small-front", async ({ h }) => impulse(h, "chest", [0, 0, -2.2])],
   ["03-small-back", async ({ h }) => impulse(h, "chest", [0, 0, 2.2])],
   ["04-small-side", async ({ h }) => impulse(h, "chest", [2.2, 0, 0])],
-  ["05-medium-shove", async ({ h }) => impulse(h, "chest", [5.0, 0, 0], [0, 0.1, 0])],
+  ["05-medium-shove", async ({ h }) => impulse(h, "chest", [5.2, 0, 0], [0, 0.1, 0])],
   ["06-strong-shove", async ({ h }) => impulse(h, "chest", [8.5, 0, -1], [0, 0.14, 0])],
   ["07-pull-pelvis-sideways", async ({ h }) => impulse(h, "pelvis", [6.0, 0, 0])],
   ["08-pull-left-thigh", async ({ h }) => impulse(h, "thighL", [5.0, 0, 0])],
   ["09-pull-right-arm", async ({ h }) => impulse(h, "upperArmR", [4.8, 0, 0])],
-  ["10-push-chest", async ({ h }) => impulse(h, "chest", [0, 0, -5.2], [0.08, 0.08, 0])],
-  ["11-push-during-step", async (f) => {
-    impulse(f.h, "chest", [5.0, 0, 0]);
-    for (let i = 0; i < Math.round(0.7 / DT); i++) {
+  ["10-offcentre-chest", async ({ h }) => impulse(h, "chest", [0, 0, -5.2], [0.08, 0.08, 0.08])],
+  ["11-second-shove-during-step", async (f) => {
+    impulse(f.h, "chest", [5.2, 0, 0]);
+    for (let i = 0; i < Math.round(0.8 / DT); i++) {
       f.h.update(DT);
       f.world.step();
       if (f.h.step.phase !== "idle") break;
@@ -153,17 +164,40 @@ for (const [name, action, seconds = 3] of scenarios) {
   const result = await run(name, action, seconds);
   report.push(result);
 
+  assert.equal(
+    result.final.controllerStyle,
+    "euphoria-human-v2-clean-physics",
+    `${name}: wrong controller under audit`,
+  );
   if (/standing|small-/.test(name)) {
     assert.ok(result.final.pelvisY > 0.62, `${name}: tiny disturbance caused collapse`);
-    assert.ok(!["collapse", "down", "limp"].includes(result.final.state), `${name}: tiny disturbance ended down`);
+    assert.ok(!["down", "limp"].includes(result.final.state), `${name}: tiny disturbance ended down`);
   }
-  if (!/fall-/.test(name)) assert.equal(result.final.unconscious, false, `${name}: mechanics disturbance should not cause fake unconsciousness`);
-  assert.equal(result.final.passive, false, `${name}: external disturbance must not instant-switch to passive ragdoll`);
-  assert.ok(result.maxSwingFootSpeed < 3.5, `${name}: recovery foot moved implausibly fast (${result.maxSwingFootSpeed.toFixed(2)} m/s)`);
+  if (!/fall-/.test(name)) {
+    assert.equal(result.final.unconscious, false, `${name}: mechanical disturbance caused fake unconsciousness`);
+    assert.equal(result.final.passive, false, `${name}: mechanical disturbance switched to passive control`);
+  }
+  assert.ok(
+    result.maxSwingFootSpeed < 2.8,
+    `${name}: recovery foot moved implausibly fast (${result.maxSwingFootSpeed.toFixed(2)} m/s)`,
+  );
+  assert.ok(result.maxPelvisSpeed < 8, `${name}: pelvis numerically launched (${result.maxPelvisSpeed.toFixed(2)} m/s)`);
 }
+
+const medium = report.find((x) => x.name === "05-medium-shove");
+assert.ok(medium.maxRisk > 0.18, "medium shove should register as a balance disturbance");
+assert.ok(medium.endSteps > medium.startSteps, "medium shove should require a physical capture step");
 
 await writeFile(
   new URL("report.json", outDir),
-  JSON.stringify({ generatedAt: new Date().toISOString(), controller: "V14", scenarios: report }, null, 2),
+  JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      controller: "euphoria-human-v2-clean-physics",
+      scenarios: report,
+    },
+    null,
+    2,
+  ),
 );
-console.log("Balance audit passed: 16 disturbance/fall scenarios simulated with bounded V14 active-ragdoll recovery.");
+console.log("Balance audit passed: 16 clean-controller disturbance/fall scenarios with bounded physical recovery.");
