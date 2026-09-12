@@ -80,7 +80,7 @@ export const MOTOR_PROFILES = Object.freeze({
   // explicit hit targets and motor inhibition, but have enough authority to
   // maintain a neutral human posture under ordinary gravity.
   spineLower: { kp: 210, kd: 18, maxTorque: 150, softSpeed: 4.3, hardSpeed: 9.2 },
-  spineUpper: { kp: 170, kd: 15, maxTorque: 120, softSpeed: 4.5, hardSpeed: 9.5 },
+  spineUpper: { kp: 185, kd: 16, maxTorque: 130, softSpeed: 4.5, hardSpeed: 9.5 },
   neck: { kp: 34, kd: 4.8, maxTorque: 24, softSpeed: 5.2, hardSpeed: 11.0 },
   hip: { kp: 62, kd: 7.2, maxTorque: 50, softSpeed: 5.0, hardSpeed: 10.2 },
   knee: { kp: 54, kd: 6.5, maxTorque: 44, softSpeed: 5.0, hardSpeed: 10.5 },
