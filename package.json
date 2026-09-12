@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check client/euphoria_lab.js && node --check client/active_human.js && node --check client/artagdoll_human.js && node --check client/physiology.js && node --check client/injury_behavior.js && node --check client/hit_reaction_profiles.js && node --check client/euphoria_balance_controller.js && node --check client/biological_human.js && node --check client/biological_human_v6.js && node --check client/biological_human_v7.js && node --check client/biological_human_v8.js && node --check client/biological_human_v9.js && node --check client/biological_human_v10.js && node --check client/biological_human_v11.js && node --check client/biological_human_v12.js && node --check client/biological_human_v13.js && node --check client/blood_fx.js && node --check scripts/balance-audit.mjs && node --check scripts/visual-audit-v2.mjs && node --check scripts/human-reaction-audit-v2.mjs && npm test",
+    "check": "node --check client/euphoria_lab.js && node --check client/active_human.js && node --check client/artagdoll_human.js && node --check client/physiology.js && node --check client/injury_behavior.js && node --check client/hit_reaction_profiles.js && node --check client/euphoria_balance_controller.js && node --check client/biological_human.js && node --check client/biological_human_v6.js && node --check client/biological_human_v7.js && node --check client/biological_human_v8.js && node --check client/biological_human_v9.js && node --check client/biological_human_v10.js && node --check client/biological_human_v11.js && node --check client/biological_human_v12.js && node --check client/biological_human_v13.js && node --check client/biological_human_v14.js && node --check client/blood_fx.js && node --check scripts/balance-audit.mjs && node --check scripts/visual-audit-v2.mjs && node --check scripts/human-reaction-audit-v2.mjs && npm test",
     "test:browser": "node scripts/browser-test.mjs",
     "audit:balance": "node scripts/balance-audit.mjs",
     "audit:visual": "node scripts/visual-audit-v2.mjs",
@@ -21,7 +21,7 @@
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/bmgames182-lab/nullspace/issues"
+    "url": "https://api.github.com/repos/bmgames182-lab/nullspace/issues"
   },
   "homepage": "https://github.com/bmgames182-lab/nullspace#readme",
   "dependencies": {
