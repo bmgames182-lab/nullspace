@@ -48,6 +48,22 @@ export class BiologicalArtagdollHumanV11 extends BiologicalArtagdollHumanV10 {
     this.hitReaction = new ConsciousReactionDirector();
   }
 
+  // The first chest/abdomen clutch needs to read immediately. Boost only this
+  // short protective reach; all forces are still equal-and-opposite through the
+  // arm chain, so this does not add projectile-like whole-body momentum.
+  pullHandTo(handName, goal, strength, dt) {
+    const acuteTorsoClutch =
+      this.behavior?.family === "torso" &&
+      this.behavior?.injuryAge < 0.9 &&
+      !this.physiology?.unconscious;
+    return super.pullHandTo(
+      handName,
+      goal,
+      acuteTorsoClutch ? strength * 1.35 : strength,
+      dt,
+    );
+  }
+
   update(dt) {
     super.update(dt);
     const r = this.hitReaction;
