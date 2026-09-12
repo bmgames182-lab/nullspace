@@ -19,8 +19,12 @@ async function deterministicReset(page) {
   });
   const snapshot = await page.evaluate(() => lab.snapshot());
   assert.equal(snapshot.controllerStyle, "euphoria-human-v2-clean-physics");
-  assert.equal(snapshot.state, "balance");
-  assert.ok(snapshot.parts.pelvis.position.y > 0.78);
+  assert.ok(snapshot.parts.pelvis.position.y > 0.78, "settled pelvis must remain upright");
+  assert.ok((snapshot.balance?.supportPolygon?.length ?? 0) >= 4, "settled body must have a real foot support polygon");
+  assert.ok((snapshot.balance?.risk ?? 1) < 0.55, `settled body should not remain critical (${snapshot.balance?.risk})`);
+  assert.equal(snapshot.physiology?.unconscious, false, "settled body must remain conscious");
+  assert.equal(snapshot.passiveHandoff, false, "settled body must retain active control");
+  assert.ok(snapshot.controlDrive > 0.5, `settled body needs active motor drive (${snapshot.controlDrive})`);
   return snapshot;
 }
 
