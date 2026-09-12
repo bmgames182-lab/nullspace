@@ -127,7 +127,7 @@ test("leg hit uses unload/hop behavior before any possible kneel", () => {
   }
 });
 
-test("moderate head hit becomes a dazed active response unless physiology actually fails", () => {
+test("moderate head hit stays dazed but supported unless physiology actually fails", () => {
   const f = fixture();
   try {
     advance(f, 2);
@@ -138,6 +138,15 @@ test("moderate head hit becomes a dazed active response unless physiology actual
       assert.ok(["dazed", "recover"].includes(f.h.hitReaction.phase));
       assert.equal(f.h.hitReaction.finalRagdoll, false);
       assert.ok(!["collapse", "limp"].includes(f.h.state));
+    }
+
+    advance(f, 2.15);
+    if (!f.h.physiology.unconscious && f.h.physiology.brainFunction > 0.5) {
+      assert.equal(f.h.hitReaction.finalRagdoll, false);
+      assert.ok(!["collapse", "down", "limp"].includes(f.h.state));
+      assert.ok(f.h.body("pelvis").translation().y > 0.62, "conscious head trauma should preserve gross standing support");
+      assert.ok(f.h.body("chest").translation().y > 0.9, "conscious head trauma should not become a torso-first floor collapse");
+      assert.ok(f.h.directedSteps <= 1, "moderate head trauma should not produce a frantic multi-step panic loop");
     }
   } finally {
     f.world.free();
