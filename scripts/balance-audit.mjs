@@ -186,7 +186,11 @@ for (const [name, action, seconds = 3] of scenarios) {
 
 const medium = report.find((x) => x.name === "05-medium-shove");
 assert.ok(medium.maxRisk > 0.18, "medium shove should register as a balance disturbance");
-assert.ok(medium.endSteps > medium.startSteps, "medium shove should require a physical capture step");
+assert.ok(medium.final.pelvisY > 0.72, "medium shove should remain recoverable without a forced theatrical step");
+
+const strong = report.find((x) => x.name === "06-strong-shove");
+assert.ok(strong.maxRisk > 0.45, "strong shove should produce substantial balance demand");
+assert.ok(strong.endSteps > strong.startSteps, "strong shove should require a physical capture step");
 
 await writeFile(
   new URL("report.json", outDir),
