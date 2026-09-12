@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
-import { BiologicalArtagdollHumanV13 } from "../client/biological_human_v13.js";
+import { BiologicalArtagdollHumanV14 } from "../client/biological_human_v14.js";
 
 await RAPIER.init();
 const DT = 1 / 240;
@@ -17,7 +17,7 @@ function fixture() {
       .setTranslation(0, -0.1, 0)
       .setFriction(1),
   );
-  return { world, h: new BiologicalArtagdollHumanV13(world, new THREE.Scene()) };
+  return { world, h: new BiologicalArtagdollHumanV14(world, new THREE.Scene()) };
 }
 
 function advance(f, seconds, sample) {
@@ -47,7 +47,7 @@ function settle(f) {
   assert.ok(f.h.body("pelvis").translation().y > 0.82);
 }
 
-test("V13 stands indefinitely without becoming a rigid statue", () => {
+test("V14 stands indefinitely without becoming a rigid statue", () => {
   const f = fixture();
   try {
     let maxSpeed = 0;
