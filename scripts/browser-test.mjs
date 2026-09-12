@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
+
 const artifacts = new URL("../test-results/", import.meta.url);
 await mkdir(artifacts, { recursive: true });
 const server = spawn(
@@ -9,6 +10,20 @@ const server = spawn(
   [new URL("./serve.mjs", import.meta.url).pathname.replace(/^\/(\w:)/, "$1")],
   { env: { ...process.env, PORT: "8001" }, stdio: "pipe" },
 );
+
+async function deterministicReset(page) {
+  await page.evaluate(() => {
+    lab.reset();
+    lab.pausePhysics(true);
+    lab.advance(2.4);
+  });
+  const snapshot = await page.evaluate(() => lab.snapshot());
+  assert.equal(snapshot.controllerStyle, "euphoria-human-v2-clean-physics");
+  assert.equal(snapshot.state, "balance");
+  assert.ok(snapshot.parts.pelvis.position.y > 0.78);
+  return snapshot;
+}
+
 let browser;
 try {
   await new Promise((resolve, reject) => {
@@ -19,45 +34,43 @@ try {
   browser = await chromium.launch({
     headless: true,
     ...(process.platform === "win32"
-      ? {
-          executablePath:
-            "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-        }
+      ? { executablePath: "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" }
       : {}),
     args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
   });
-  const page = await browser.newPage({
-      viewport: { width: 1280, height: 720 },
-    }),
-    errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("http://127.0.0.1:8001/?test");
-  await page.waitForFunction(() => window.lab?.human.age > 2);
-  assert.equal(await page.evaluate(() => lab.human.state), "balance");
+  await page.waitForFunction(() => window.lab?.human);
 
-  // The browser test verifies targeting/raycast plumbing, not weapon-spread RNG.
-  // Keep normal gameplay untouched while making exact body-part assertions repeatable.
+  // Exact body targeting, while ordinary gameplay retains normal spread RNG.
   await page.evaluate(() => {
     Math.random = () => 0.5;
   });
+  await deterministicReset(page);
 
   await page.screenshot({
     path: new URL("standing.png", artifacts).pathname.replace(/^\/(\w:)/, "$1"),
   });
   await page.mouse.click(640, 360);
   await page.waitForFunction(() => !!document.pointerLockElement);
+
   const records = [];
   for (const name of ["chest", "shinL", "upperArmR", "head"]) {
     await page.keyboard.press("r");
-    await page.waitForFunction(() => lab.human.age > 2);
-    await page.evaluate((name) => lab.aimAt(name), name);
+    await page.evaluate(() => {
+      lab.pausePhysics(true);
+      lab.advance(2.4);
+    });
+    await page.evaluate((part) => lab.aimAt(part), name);
 
-    const aimDot = await page.evaluate((name) => {
-      const p = lab.human.body(name).translation();
+    const aimDot = await page.evaluate((part) => {
+      const p = lab.human.body(part).translation();
       const origin = lab.camera.position;
-      const tx = p.x - origin.x,
-        ty = p.y - origin.y,
-        tz = p.z - origin.z;
+      const tx = p.x - origin.x;
+      const ty = p.y - origin.y;
+      const tz = p.z - origin.z;
       const length = Math.hypot(tx, ty, tz);
       const direction = lab.camera.getWorldDirection(origin.clone());
       return (direction.x * tx + direction.y * ty + direction.z * tz) / length;
@@ -66,46 +79,33 @@ try {
 
     await page.mouse.down({ button: "left" });
     await page.mouse.up({ button: "left" });
-    await page.waitForFunction(() => lab.human.hitAge < 1, undefined, {
-      timeout: 5000,
-    });
     const hitPart = await page.evaluate(() => lab.human.lastHit.part);
-    assert.equal(hitPart, name);
+    assert.equal(hitPart, name, `real raycast should hit ${name}`);
 
-    // A real gunshot must now create a persistent wound and visible blood FX.
-    await page.waitForFunction(
-      () => {
-        const b = lab.bloodStats();
-        return b.wounds > 0 && b.effects > 0;
-      },
-      undefined,
-      { timeout: 5000 },
-    );
+    const bloodNow = await page.evaluate(() => lab.bloodStats());
+    assert.ok(bloodNow.wounds > 0 && bloodNow.effects > 0, `${name}: real gunshot should create blood FX`);
 
-    await page.waitForTimeout(240);
+    await page.evaluate(() => lab.advance(0.24));
     await page.screenshot({
-      path: new URL(name + "-reaction.png", artifacts).pathname.replace(
-        /^\/(\w:)/,
-        "$1",
-      ),
+      path: new URL(`${name}-reaction.png`, artifacts).pathname.replace(/^\/(\w:)/, "$1"),
     });
-    await page.waitForTimeout(1800);
+    const reaction = await page.evaluate(() => lab.snapshot());
+    assert.equal(reaction.passiveHandoff, false, `${name}: moderate shot should not instant-ragdoll`);
+
+    await page.evaluate(() => lab.advance(1.8));
     records.push({
       name,
       snapshot: await page.evaluate(() => lab.snapshot()),
       blood: await page.evaluate(() => lab.bloodStats()),
     });
     await page.screenshot({
-      path: new URL(name + "-later.png", artifacts).pathname.replace(
-        /^\/(\w:)/,
-        "$1",
-      ),
+      path: new URL(`${name}-later.png`, artifacts).pathname.replace(/^\/(\w:)/, "$1"),
     });
   }
 
-  // Blood remains in the room when the ragdoll is reset, but K is a full cleanup.
+  // Blood persists when the human is reset, while K remains a full room cleanup.
   const beforeCleanup = await page.evaluate(() => lab.bloodStats());
-  assert.ok(beforeCleanup.effects > 0, "blood should persist across ragdoll resets");
+  assert.ok(beforeCleanup.effects > 0, "blood should persist across human resets");
   await page.keyboard.press("k");
   await page.waitForFunction(() => {
     const b = lab.bloodStats();
@@ -113,23 +113,22 @@ try {
   });
 
   await page.keyboard.press("r");
-  await page.waitForFunction(() => lab.human.age > 2);
+  await page.evaluate(() => {
+    lab.pausePhysics(true);
+    lab.advance(2.4);
+  });
+
+  // Camera/weapon presentation remains real-time even while deterministic physics is paused.
   await page.mouse.down({ button: "right" });
   await page.waitForTimeout(400);
-  assert.ok(await page.evaluate(() => lab.camera.fov < 70));
+  assert.ok(await page.evaluate(() => lab.camera.fov < 70), "ADS should narrow FOV");
   await page.mouse.up({ button: "right" });
 
-  const before = await page.evaluate(() => ({
-    x: lab.camera.position.x,
-    z: lab.camera.position.z,
-  }));
+  const before = await page.evaluate(() => ({ x: lab.camera.position.x, z: lab.camera.position.z }));
   await page.keyboard.down("d");
   await page.waitForTimeout(250);
   await page.keyboard.up("d");
-  const after = await page.evaluate(() => ({
-    x: lab.camera.position.x,
-    z: lab.camera.position.z,
-  }));
+  const after = await page.evaluate(() => ({ x: lab.camera.position.x, z: lab.camera.position.z }));
   assert.ok(
     Math.hypot(after.x - before.x, after.z - before.z) > 0.2,
     "D strafe should move the camera horizontally",
@@ -143,7 +142,7 @@ try {
     JSON.stringify({ errors, records, beforeCleanup }, null, 2),
   );
   console.log(
-    "Browser passed: real pointer lock, deterministic aimed shots, persistent blood FX, K cleanup, ADS, D strafe, reset, ESC, no page errors.",
+    "Browser passed: clean EuphoriaHuman runtime, real pointer-lock raycasts, exact 240 Hz reactions, persistent blood FX, cleanup, ADS, movement, reset and ESC.",
   );
 } finally {
   await browser?.close();
