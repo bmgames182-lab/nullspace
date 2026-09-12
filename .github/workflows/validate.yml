@@ -18,6 +18,8 @@ jobs:
       - run: npm ci
       - name: Check syntax and simulate active ragdoll
         run: npm run check
+      - name: Run sixteen-scenario whole-body balance audit
+        run: npm run audit:balance
       - name: Verify focused entrypoint
         run: |
           grep -Fq 'ACTIVE BODY LAB' client/index.html
