@@ -69,10 +69,16 @@ export class BalanceController {
     this.disturbanceRisk = Math.max(this.disturbanceRisk, clamp(amount, 0, 1.15));
   }
 
+  disturbanceAge() { return Math.min(this.h.hitAge ?? 99, this._observedDisturbanceAge); }
   reactionAuthority() {
-    const age = Math.min(this.h.hitAge ?? 99, this._observedDisturbanceAge);
+    const age = this.disturbanceAge();
     if (age >= 0.12) return 1;
     return smooth((age - 0.045) / 0.075);
+  }
+  translationAuthority() {
+    const age = this.disturbanceAge();
+    if (age >= 0.28) return 1;
+    return 0.08 + 0.92 * smooth((age - 0.04) / 0.24);
   }
 
   updateFootAnchors() {
@@ -100,7 +106,8 @@ export class BalanceController {
       );
       const kick = shielded ? clamp((rawKick - 0.7) / 0.3, 0, 1) * 0.78 : rawKick;
       if (kick > 0.045) {
-        this._observedDisturbanceAge = 0;
+        const freshImpulse = this._observedDisturbanceAge > 0.06 && kick >= Math.max(0.08, this.disturbanceRisk * 0.82);
+        if (freshImpulse) this._observedDisturbanceAge = 0;
         this.disturbanceRisk = Math.max(this.disturbanceRisk, kick);
         const d = md.lengthSq() > 1e-5 ? md : cd.lengthSq() > pd.lengthSq() ? cd : pd;
         if (d.lengthSq() > 1e-6) this.disturbanceDirection.copy(d.normalize());
@@ -194,40 +201,41 @@ export class BalanceController {
 
   applySupport(dt) {
     const h = this.h; if (["passive", "downed"].includes(this.state)) return;
-    const grossAuthority = 0.1 + 0.9 * this.reactionAuthority();
+    const postureAuthority = 0.1 + 0.9 * this.reactionAuthority();
+    const moveAuthority = this.translationAuthority();
     const pelvis = h.body("pelvis"), abdomen = h.body("abdomen"), chest = h.body("chest"), pp = v(pelvis.translation()), pv = v(pelvis.linvel()), swing = h.step.phase !== "idle" ? h.step.side : null, drive = h.controlDrive(), supports = [];
     for (const side of ["L", "R"]) {
       const foot = h.body("foot" + side), data = h.feet[side]; if (side === swing || data.quality < 0.14) continue;
       const capacity = h.legCapacity(side); if (capacity < 0.08) continue; supports.push({ side, foot, data, capacity });
       const pos = v(foot.translation()), rel = v(foot.linvel()).sub(v(pelvis.linvel())), err = data.anchor.clone().sub(pos).setY(0), release = smooth((this.risk - 0.46) / 0.34);
-      const traction = err.multiplyScalar(240 * (1 - release)).addScaledVector(new THREE.Vector3(rel.x, 0, rel.z), -32 * (1 - release)).multiplyScalar(grossAuthority);
-      h.forcePair(foot, pelvis, traction, (92 * capacity * (1 - release) + 9) * grossAuthority, dt);
+      const traction = err.multiplyScalar(240 * (1 - release)).addScaledVector(new THREE.Vector3(rel.x, 0, rel.z), -32 * (1 - release)).multiplyScalar(moveAuthority);
+      h.forcePair(foot, pelvis, traction, (92 * capacity * (1 - release) + 9) * moveAuthority, dt);
       if (err.length() > 0.11 || release > 0.82) data.anchor.lerp(pos, clamp(dt * 7, 0, 1));
     }
     const supportTotal = supports.reduce((sum, item) => sum + item.data.quality * item.capacity, 0);
     for (const s of supports) {
       if (supportTotal <= 1e-5) continue;
       const share = s.data.quality * s.capacity / supportTotal, targetHeight = 0.97 - clamp(this.risk, 0, 1) * 0.105, hf = clamp((targetHeight - pp.y) * 900 - pv.y * 140, -130, 580);
-      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 720 - this.comVelocity.x * 140, -200, 200) * grossAuthority * share;
-      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 720 - this.comVelocity.z * 140, -200, 200) * grossAuthority * share;
+      const horizontalX = clamp((this.supportCenter.x - this.com.x) * 720 - this.comVelocity.x * 140, -200, 200) * moveAuthority * share;
+      const horizontalZ = clamp((this.supportCenter.z - this.com.z) * 720 - this.comVelocity.z * 140, -200, 200) * moveAuthority * share;
       const vertical = Math.max(0, (h.mass * 9.81 + hf) * share);
       const force = new THREE.Vector3(horizontalX, vertical, horizontalZ).multiplyScalar(drive);
       h.forcePair(pelvis, s.foot, force, 900, dt);
     }
     if (supports.length) {
-      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(360 + this.risk * 95).addScaledVector(v(pelvis.angvel()), -(50 + this.risk * 20)).multiplyScalar(grossAuthority);
-      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (160 + this.risk * 38) * grossAuthority, dt);
+      const corr = UP.clone().applyQuaternion(q(pelvis.rotation())).cross(UP).multiplyScalar(360 + this.risk * 95).addScaledVector(v(pelvis.angvel()), -(50 + this.risk * 20)).multiplyScalar(postureAuthority);
+      for (const s of supports) h.torquePair(s.foot, pelvis, corr.clone().multiplyScalar(drive / supports.length), (160 + this.risk * 38) * postureAuthority, dt);
 
       const pelvisAv = v(pelvis.angvel());
       const abdomenUp = UP.clone().applyQuaternion(q(abdomen.rotation()));
       const abdomenRel = v(abdomen.angvel()).sub(pelvisAv);
-      const abdomenCorr = abdomenUp.cross(UP).multiplyScalar(150).addScaledVector(abdomenRel, -18).multiplyScalar(grossAuthority * drive);
-      h.torquePair(pelvis, abdomen, abdomenCorr, 105 * grossAuthority * drive, dt);
+      const abdomenCorr = abdomenUp.cross(UP).multiplyScalar(150).addScaledVector(abdomenRel, -18).multiplyScalar(postureAuthority * drive);
+      h.torquePair(pelvis, abdomen, abdomenCorr, 105 * postureAuthority * drive, dt);
 
       const chestUp = UP.clone().applyQuaternion(q(chest.rotation()));
       const chestRel = v(chest.angvel()).sub(v(abdomen.angvel()));
-      const chestCorr = chestUp.cross(UP).multiplyScalar(175).addScaledVector(chestRel, -20).multiplyScalar(grossAuthority * drive);
-      h.torquePair(abdomen, chest, chestCorr, 120 * grossAuthority * drive, dt);
+      const chestCorr = chestUp.cross(UP).multiplyScalar(175).addScaledVector(chestRel, -20).multiplyScalar(postureAuthority * drive);
+      h.torquePair(abdomen, chest, chestCorr, 120 * postureAuthority * drive, dt);
     }
   }
 
@@ -257,5 +265,5 @@ export class BalanceController {
     if (!this.debugEnabled) return; this.setupDebug(); const d = this.debug, points = this.supportHull.map((p) => new THREE.Vector3(p.x, p.y + 0.025, p.z));
     d.support.geometry.dispose(); d.support.geometry = new THREE.BufferGeometry().setFromPoints(points.length >= 2 ? points : [this.supportCenter, this.supportCenter.clone().add(new THREE.Vector3(0.001, 0, 0))]); d.com.position.copy(this.com); d.projection.position.copy(this.projectedCom).add(new THREE.Vector3(0, 0.025, 0)); d.capture.position.copy(this.capture).add(new THREE.Vector3(0, 0.035, 0)); if (this.stepTarget) d.target.position.copy(this.stepTarget).add(new THREE.Vector3(0, 0.035, 0)); else d.target.position.copy(this.supportCenter).setY(-5);
   }
-  snapshot() { return { state: this.state, stateAge: this.stateAge, risk: this.risk, geometricRisk: this.geometricRisk, disturbanceRisk: this.disturbanceRisk, reactionAuthority: this.reactionAuthority(), supportCenter: { x: this.supportCenter.x, y: this.supportCenter.y, z: this.supportCenter.z }, supportPolygon: this.supportHull.map((p) => ({ x: p.x, y: p.y, z: p.z })), com: { x: this.com.x, y: this.com.y, z: this.com.z }, projectedCom: { x: this.projectedCom.x, y: this.projectedCom.y, z: this.projectedCom.z }, predictedCom: { x: this.capture.x, y: this.capture.y, z: this.capture.z }, velocity: { x: this.comVelocity.x, y: this.comVelocity.y, z: this.comVelocity.z }, recoveryFoot: this.recoveryFoot, stepTarget: this.stepTarget && { x: this.stepTarget.x, y: this.stepTarget.y, z: this.stepTarget.z }, muscleScale: this.muscleScale(), outside: this.outside, speed: this.speed, lean: this.lean, angular: this.angular, selfMotionQuiet: this._selfMotionQuiet, observedDisturbanceAge: this._observedDisturbanceAge }; }
+  snapshot() { return { state: this.state, stateAge: this.stateAge, risk: this.risk, geometricRisk: this.geometricRisk, disturbanceRisk: this.disturbanceRisk, reactionAuthority: this.reactionAuthority(), translationAuthority: this.translationAuthority(), supportCenter: { x: this.supportCenter.x, y: this.supportCenter.y, z: this.supportCenter.z }, supportPolygon: this.supportHull.map((p) => ({ x: p.x, y: p.y, z: p.z })), com: { x: this.com.x, y: this.com.y, z: this.com.z }, projectedCom: { x: this.projectedCom.x, y: this.projectedCom.y, z: this.projectedCom.z }, predictedCom: { x: this.capture.x, y: this.capture.y, z: this.capture.z }, velocity: { x: this.comVelocity.x, y: this.comVelocity.y, z: this.comVelocity.z }, recoveryFoot: this.recoveryFoot, stepTarget: this.stepTarget && { x: this.stepTarget.x, y: this.stepTarget.y, z: this.stepTarget.z }, muscleScale: this.muscleScale(), outside: this.outside, speed: this.speed, lean: this.lean, angular: this.angular, selfMotionQuiet: this._selfMotionQuiet, observedDisturbanceAge: this._observedDisturbanceAge }; }
 }
