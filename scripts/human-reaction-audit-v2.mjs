@@ -11,7 +11,8 @@ const server = spawn(
   { env: { ...process.env, PORT: "8005" }, stdio: "pipe" },
 );
 
-const checkpoints = [0.1, 0.45, 0.8, 1.6, 2.8, 4.2, 5.2, 6.4];
+const checkpoints = [0.1, 0.45, 0.8, 1.6, 2.8, 4.2, 5.2, 6.4, 8.0, 10.0];
+const replayCheckpoints = [0.1, 0.45, 0.8, 1.6, 2.8, 4.2, 6.4, 8.0, 10.0];
 const idFor = (seconds) => String(Math.round(seconds * 1000)).padStart(4, "0");
 
 async function waitForAge(page, target) {
@@ -84,7 +85,21 @@ async function collectTimeline(page) {
     sample.actualElapsed = sample.humanAge - startAge;
     samples.push({ targetElapsed, sample });
   }
-  return { before, startAge, samples };
+
+  // V22 deliberately keeps a conscious panicked body active on the ground for
+  // much longer than the old 6.4-second audit. Wait for the *actual* handoff
+  // instead of hard-coding an early ragdoll switch, then bound that delay.
+  await page.waitForFunction(
+    () => window.lab?.human?.passiveHandoff === true,
+    undefined,
+    { timeout: 9000 },
+  );
+  const handoff = await snap(page);
+  handoff.actualElapsed = handoff.humanAge - startAge;
+  await page.screenshot({
+    path: new URL(`chest-handoff-${idFor(handoff.actualElapsed)}.png`, root).pathname.replace(/^\/(\w:)/, "$1"),
+  });
+  return { before, startAge, samples, handoff };
 }
 
 async function replayFrame(page, elapsed) {
@@ -131,6 +146,7 @@ try {
   const by = (t) => timeline.samples.find((x) => x.targetElapsed === t).sample;
   const s100 = by(0.1), s450 = by(0.45), s800 = by(0.8), s1600 = by(1.6);
   const s2800 = by(2.8), s4200 = by(4.2), s5200 = by(5.2), s6400 = by(6.4);
+  const s8000 = by(8.0), s10000 = by(10.0), handoff = timeline.handoff;
   const initialNearest = Math.min(timeline.before.left, timeline.before.right);
 
   for (const { targetElapsed, sample } of timeline.samples)
@@ -143,19 +159,35 @@ try {
   assert.equal(s1600.physiology?.unconscious, false, "panic phase should remain conscious");
   assert.ok(["kneel", "panic"].includes(s2800.reaction?.phase), `2.8s should be panic/kneel, got ${s2800.reaction?.phase}`);
   assert.equal(s2800.physiology?.unconscious, false);
-  assert.ok(["kneel", "failing", "grounded"].includes(s4200.reaction?.phase), `4.2s should be kneeling/failing/grounded, got ${s4200.reaction?.phase}`);
-  assert.ok(["failing", "grounded", "ragdoll"].includes(s5200.reaction?.phase), `5.2s should be late pain-collapse sequence, got ${s5200.reaction?.phase}`);
-  assert.equal(s6400.passiveHandoff, true, "passive sandbox handoff must happen only after the readable coping sequence");
-  assert.equal(s6400.reaction?.phase, "ragdoll");
+  assert.ok(["kneel", "failing", "grounded", "groundPanic"].includes(s4200.reaction?.phase), `4.2s should be kneeling/failing/grounded, got ${s4200.reaction?.phase}`);
+  assert.ok(["failing", "grounded", "groundPanic"].includes(s5200.reaction?.phase), `5.2s should be late pain-collapse/ground coping, got ${s5200.reaction?.phase}`);
+
+  for (const [label, sample] of [["6.4s", s6400], ["8.0s", s8000]]) {
+    assert.equal(sample.dead, false, `${label} ground panic should not be death`);
+    assert.equal(sample.physiology?.unconscious, false, `${label} ground panic should remain conscious`);
+    assert.equal(sample.passiveHandoff, false, `${label} should still have active muscle control`);
+    assert.equal(sample.behavior?.trauma?.mode, "panic", `${label} should remain the panic episode`);
+    assert.equal(sample.behavior?.trauma?.groundActive, true, `${label} should still be active ground coping`);
+    assert.equal(sample.reaction?.phase, "groundPanic", `${label} should be groundPanic, got ${sample.reaction?.phase}`);
+  }
+
+  // By ten seconds the response may still be writhing or may be approaching its
+  // handoff window, but it must never have silently become a dead/unconscious body.
+  assert.equal(s10000.dead, false);
+  assert.equal(s10000.physiology?.unconscious, false);
+  assert.ok(handoff.actualElapsed > 8.0, `passive handoff happened too early (${handoff.actualElapsed.toFixed(2)}s)`);
+  assert.ok(handoff.actualElapsed < 16.0, `panic never settled into passive ragdoll (${handoff.actualElapsed.toFixed(2)}s)`);
+  assert.equal(handoff.passiveHandoff, true);
+  assert.equal(handoff.reaction?.phase, "ragdoll");
   assert.deepEqual(errors, []);
 
   const replays = [];
-  for (const elapsed of checkpoints) replays.push(await replayFrame(page, elapsed));
+  for (const elapsed of replayCheckpoints) replays.push(await replayFrame(page, elapsed));
   await writeFile(
     new URL("report.json", root),
     JSON.stringify({ generatedAt: new Date().toISOString(), timeline, replays, errors }, null, 2),
   );
-  console.log("Human reaction audit v2 passed: exact-time chest sequence shows clutch, real panic movement, pain-kneel/ground coping, then delayed passive handoff.");
+  console.log(`Human reaction audit v2 passed: clutch -> panic -> fall -> extended conscious ground coping -> passive handoff at ${handoff.actualElapsed.toFixed(2)}s.`);
 } finally {
   await browser?.close();
   server.kill();
